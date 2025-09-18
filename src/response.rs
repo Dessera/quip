@@ -71,6 +71,10 @@ impl Response {
     pub fn error(request: Option<Request>, err: ResponseError) -> Self {
         Response::new(request, ResponseBody::Error(err))
     }
+
+    pub fn recv(request: Option<Request>, msg: String) -> Self {
+        Response::new(request, ResponseBody::Recv(msg))
+    }
 }
 
 impl fmt::Display for Response {

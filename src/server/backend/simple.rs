@@ -13,7 +13,7 @@ use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt},
     net::{TcpListener, ToSocketAddrs},
-    sync::{Mutex, Notify},
+    sync::Mutex,
 };
 
 pub struct SimpleServer {
@@ -73,6 +73,14 @@ impl SimpleServer {
 
         Ok(())
     }
+
+    pub async fn find_user(&self, name: &str) -> TcResult<MessageQueue> {
+        let users = self.users.lock().await;
+        match users.get(name) {
+            Some(user) => Ok(user.clone()),
+            None => return Err(TcError::NotFound(format!("No user named '{}'.", name))),
+        }
+    }
 }
 
 impl SimpleServer {
@@ -84,11 +92,9 @@ impl SimpleServer {
         let uname = self.serve_unauth(&mut reader, &mut writer).await?;
         let user = self.create_user(uname.as_str()).await?;
 
-        let notify = Arc::new(Notify::new());
-
         let res = tokio::try_join!(
-            self.serve_auth_read(uname.as_str(), user.clone(), &mut reader, notify.clone()),
-            self.serve_auth_write(user, &mut writer, notify)
+            self.serve_auth_read(uname.as_str(), user.clone(), &mut reader),
+            self.serve_auth_write(user, &mut writer)
         );
 
         self.remove_user(uname.as_str()).await;
@@ -151,13 +157,12 @@ impl SimpleServer {
         &self,
         queue: MessageQueue,
         writer: &mut ConnectionWriter<W>,
-        notify: Arc<Notify>,
     ) -> TcResult<()>
     where
         W: AsyncWriteExt + Unpin,
     {
         loop {
-            notify.notified().await;
+            queue.notified().await;
             queue.transmit(writer).await?;
         }
     }
@@ -167,7 +172,6 @@ impl SimpleServer {
         name: &str,
         queue: MessageQueue,
         reader: &mut ConnectionReader<R>,
-        notify: Arc<Notify>,
     ) -> TcResult<()>
     where
         R: AsyncBufReadExt + Unpin,
@@ -180,7 +184,6 @@ impl SimpleServer {
                         queue
                             .push(Response::error(None, ResponseError::BadCommand))
                             .await;
-                        notify.notify_one();
                         continue;
                     }
                     Err(err) => return Err(err),
@@ -188,6 +191,18 @@ impl SimpleServer {
             };
 
             match &request.body {
+                RequestBody::Send(uname, msg) => {
+                    let resp = match self.find_user(uname).await {
+                        Ok(target) => {
+                            let uname_cp = uname.to_string();
+                            target.push(Response::recv(None, msg.clone())).await;
+                            Response::success(Some(request), Some(uname_cp))
+                        }
+                        Err(_) => Response::error(Some(request), ResponseError::NotFound),
+                    };
+
+                    queue.push(resp).await;
+                }
                 RequestBody::Login(uname) | RequestBody::SetName(uname) => {
                     let uname_cp = uname.clone();
 
@@ -209,8 +224,6 @@ impl SimpleServer {
                     queue.push(Response::success(Some(request), None)).await;
                 }
             }
-
-            notify.notify_one();
         }
     }
 }

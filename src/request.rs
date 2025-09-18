@@ -2,6 +2,7 @@ use crate::TcError;
 
 #[derive(Debug)]
 pub enum RequestBody {
+    Send(String, String),
     Login(String),
     SetName(String),
     Logout,
@@ -21,6 +22,7 @@ impl Request {
 
     pub fn label(&self) -> &str {
         match self.body {
+            RequestBody::Send(_, _) => "Send",
             RequestBody::Login(_) => "Login",
             RequestBody::SetName(_) => "SetName",
             RequestBody::Logout => "Logout",
@@ -41,6 +43,7 @@ impl TryFrom<&str> for Request {
 
         let tag = parts[0].to_string();
         let body = match parts[1..] {
+            ["Send", name, ..] => RequestBody::Send(name.to_string(), parts[3..].join(" ")),
             ["Login", name] => RequestBody::Login(name.to_string()),
             ["SetName", name] => RequestBody::SetName(name.to_string()),
             ["Logout"] => RequestBody::Logout,
