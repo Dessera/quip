@@ -4,24 +4,27 @@ use crate::TcError;
 pub enum RequestBody {
     Login(String),
     SetName(String),
+    Logout,
     Nop,
 }
 
 #[derive(Debug)]
 pub struct Request {
+    pub tag: String,
     pub body: RequestBody,
 }
 
 impl Request {
-    pub fn new(body: RequestBody) -> Self {
-        Self { body }
+    pub fn new(tag: String, body: RequestBody) -> Self {
+        Self { tag, body }
     }
 
     pub fn label(&self) -> &str {
         match self.body {
-            RequestBody::Login(_) => "LOGIN",
-            RequestBody::SetName(_) => "SETNAME",
-            RequestBody::Nop => "NOP",
+            RequestBody::Login(_) => "Login",
+            RequestBody::SetName(_) => "SetName",
+            RequestBody::Logout => "Logout",
+            RequestBody::Nop => "Nop",
         }
     }
 }
@@ -31,13 +34,20 @@ impl TryFrom<&str> for Request {
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         let parts: Vec<&str> = value.trim().split(' ').collect();
-        let body = match parts[..] {
-            ["LOGIN", name] => RequestBody::Login(name.to_string()),
-            ["SETNAME", name] => RequestBody::SetName(name.to_string()),
-            ["NOP"] => RequestBody::Nop,
+
+        if parts.len() < 1 {
+            return Err(TcError::Parse(value.to_string()));
+        }
+
+        let tag = parts[0].to_string();
+        let body = match parts[1..] {
+            ["Login", name] => RequestBody::Login(name.to_string()),
+            ["SetName", name] => RequestBody::SetName(name.to_string()),
+            ["Logout"] => RequestBody::Logout,
+            ["Nop"] => RequestBody::Nop,
             _ => return Err(TcError::Parse(value.to_string())),
         };
 
-        Ok(Request::new(body))
+        Ok(Request::new(tag, body))
     }
 }

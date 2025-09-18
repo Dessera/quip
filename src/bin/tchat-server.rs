@@ -1,3 +1,4 @@
+use log::error;
 use tchat::{
     TcResult,
     server::{self, backend::SimpleServer},
@@ -7,5 +8,18 @@ use tchat::{
 async fn main() -> TcResult<()> {
     env_logger::init();
 
-    server::run(SimpleServer::bind("0.0.0.0:1145").await?).await
+    let backend = match SimpleServer::bind("0.0.0.0:1145").await {
+        Ok(backend) => backend,
+        Err(err) => {
+            error!("{}", err);
+            return Err(err);
+        }
+    };
+
+    if let Err(err) = server::run(backend).await {
+        error!("{}", err);
+        return Err(err);
+    }
+
+    Ok(())
 }

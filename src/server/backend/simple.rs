@@ -4,23 +4,21 @@ use crate::{
     response::{Response, ResponseError},
     server::{
         backend::Backend,
-        connection::{Connection, ConnectionStream},
+        connection::{Connection, ConnectionReader, ConnectionWriter},
+        queue::MessageQueue,
     },
 };
-use std::{
-    collections::{HashMap, VecDeque},
-    sync::Arc,
-    time::Duration,
-};
+use log::{info, warn};
+use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufStream},
+    io::{AsyncBufReadExt, AsyncWriteExt},
     net::{TcpListener, ToSocketAddrs},
     sync::{Mutex, Notify},
 };
 
 pub struct SimpleServer {
     pub listener: TcpListener,
-    pub users: Arc<Mutex<HashMap<String, Arc<Mutex<VecDeque<Response>>>>>>,
+    pub users: Arc<Mutex<HashMap<String, MessageQueue>>>,
 }
 
 impl SimpleServer {
@@ -36,19 +34,30 @@ impl SimpleServer {
 }
 
 impl SimpleServer {
-    pub(self) async fn serve_inner<RW>(&self, mut stream: ConnectionStream<RW>) -> TcResult<()>
-    where
-        RW: AsyncBufReadExt + AsyncWriteExt + Unpin,
-    {
-        let uname = self.serve_unauth(&mut stream).await?;
+    pub(self) async fn serve_inner(&self, conn: Connection) -> TcResult<()> {
+        let (mut rx, mut tx) = conn.socket.into_split();
+        let mut reader = ConnectionReader::from_read(&mut rx);
+        let mut writer = ConnectionWriter::from_write(&mut tx);
 
-        let stream = Arc::new(Mutex::new(stream));
+        let uname = self.serve_unauth(&mut reader, &mut writer).await?;
+        let user = MessageQueue::new();
+
+        {
+            let mut users = self.users.lock().await;
+            users.insert(uname.clone(), user.clone());
+        }
+
         let notify = Arc::new(Notify::new());
 
         let res = tokio::try_join!(
-            self.serve_auth_read(&uname, stream.clone(), notify.clone()),
-            self.serve_auth_write(&uname, stream, notify)
+            self.serve_auth_read(user.clone(), &mut reader, notify.clone()),
+            self.serve_auth_write(user, &mut writer, notify)
         );
+
+        {
+            let mut users = self.users.lock().await;
+            users.remove(uname.as_str());
+        }
 
         match res {
             Ok(_) => Ok(()),
@@ -56,17 +65,20 @@ impl SimpleServer {
         }
     }
 
-    async fn serve_unauth<RW>(&self, stream: &mut ConnectionStream<RW>) -> TcResult<String>
+    async fn serve_unauth<R, W>(
+        &self,
+        reader: &mut ConnectionReader<R>,
+        writer: &mut ConnectionWriter<W>,
+    ) -> TcResult<String>
     where
-        RW: AsyncBufReadExt + AsyncWriteExt + Unpin,
+        R: AsyncBufReadExt + Unpin,
+        W: AsyncWriteExt + Unpin,
     {
-        let uname: String;
-
         loop {
-            let request = match stream.get_request().await {
+            let request = match reader.get_request().await {
                 Ok(request) => request,
                 Err(TcError::Parse(_)) => {
-                    stream
+                    writer
                         .write_response(Response::error(None, ResponseError::BadCommand))
                         .await?;
                     continue;
@@ -76,85 +88,69 @@ impl SimpleServer {
 
             match &request.body {
                 RequestBody::Login(name) | RequestBody::SetName(name) => {
-                    let msg = name.clone();
-                    uname = name.clone();
+                    let uname = name.clone();
 
-                    stream
-                        .write_response(Response::success(Some(request), msg))
+                    writer
+                        .write_response(Response::success(Some(request), Some(uname.clone())))
                         .await?;
 
-                    break;
+                    break Ok(uname);
                 }
+                RequestBody::Logout => return Err(TcError::Disconnect),
+                RequestBody::Nop => {
+                    writer
+                        .write_response(Response::success(Some(request), None))
+                        .await?;
+                }
+
+                #[allow(unreachable_patterns)] // TODO: Remove this
                 _ => {
-                    stream
+                    writer
                         .write_response(Response::error(None, ResponseError::Unauthorized))
                         .await?;
                 }
             }
         }
-
-        let mut users = self.users.lock().await;
-        users.insert(uname.clone(), Arc::new(Mutex::new(VecDeque::new())));
-
-        Ok(uname)
     }
 
-    async fn serve_auth_write<RW>(
+    async fn serve_auth_write<W>(
         &self,
-        name: &str,
-        stream: Arc<Mutex<ConnectionStream<RW>>>,
+        queue: MessageQueue,
+        writer: &mut ConnectionWriter<W>,
         notify: Arc<Notify>,
     ) -> TcResult<()>
     where
-        RW: AsyncWriteExt + Unpin,
+        W: AsyncWriteExt + Unpin,
     {
-        let user = {
-            let users = self.users.lock().await;
-            match users.get(name) {
-                Some(curr) => curr.clone(),
-                None => return Err(TcError::Unknown(format!("No user named {}", name))),
-            }
-        };
-
         loop {
             notify.notified().await;
-
-            let mut user = user.lock().await;
-            while !user.is_empty() {
-                let resp = match user.pop_front() {
-                    Some(resp) => resp,
-                    None => continue,
-                };
-
-                let mut stream = stream.lock().await;
-                stream.write_response(resp).await?;
-            }
+            queue.transmit(writer).await?;
         }
     }
 
-    async fn serve_auth_read<RW>(
+    async fn serve_auth_read<R>(
         &self,
-        name: &str,
-        _stream: Arc<Mutex<ConnectionStream<RW>>>,
+        queue: MessageQueue,
+        reader: &mut ConnectionReader<R>,
         notify: Arc<Notify>,
     ) -> TcResult<()>
     where
-        RW: AsyncBufReadExt + Unpin,
+        R: AsyncBufReadExt + Unpin,
     {
-        let user = {
-            let users = self.users.lock().await;
-            match users.get(name) {
-                Some(curr) => curr.clone(),
-                None => return Err(TcError::Unknown(format!("No user named {}", name))),
-            }
-        };
-
         loop {
-            let mut user = user.lock().await;
-            user.push_back(Response::success(None, "Hello".to_string()));
-            notify.notify_one();
-
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            let _request = {
+                match reader.get_request().await {
+                    Ok(request) => request,
+                    Err(TcError::Parse(_)) => {
+                        queue
+                            .push(Response::error(None, ResponseError::BadCommand))
+                            .await;
+                        notify.notify_one();
+                        continue;
+                    }
+                    Err(err) => return Err(err),
+                }
+            };
         }
     }
 }
@@ -165,12 +161,23 @@ impl Backend for SimpleServer {
         Ok(Connection::new(socket, addr))
     }
 
-    async fn serve(&self, mut conn: Connection) -> TcResult<()> {
-        let stream = ConnectionStream::new(BufStream::new(&mut conn.socket));
+    async fn serve(&self, conn: Connection) -> TcResult<()> {
+        let addr = conn.addr;
 
-        match self.serve_inner(stream).await {
-            Err(TcError::Disconnect) => Ok(()),
-            res => res,
+        info!("Unauth connection {} accepted", addr);
+        match self.serve_inner(conn).await {
+            Ok(_) | Err(TcError::Disconnect) => {
+                info!("Connection {} disconnected", addr);
+                Ok(())
+            }
+            Err(err) => {
+                warn!("{}", err);
+                Err(err)
+            }
         }
+    }
+
+    fn address(&self) -> TcResult<SocketAddr> {
+        Ok(self.listener.local_addr()?)
     }
 }

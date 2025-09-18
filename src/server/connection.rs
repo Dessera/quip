@@ -1,10 +1,9 @@
+use crate::{TcError, TcResult, request::Request, response::Response};
 use std::net::SocketAddr;
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt},
+    io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, BufStream, BufWriter},
     net::TcpStream,
 };
-
-use crate::{TcError, TcResult, request::Request, response::Response};
 
 pub struct Connection {
     pub socket: TcpStream,
@@ -21,9 +20,40 @@ pub struct ConnectionStream<RW> {
     stream: RW,
 }
 
+pub type ConnectionReader<R> = ConnectionStream<R>;
+
+pub type ConnectionWriter<W> = ConnectionStream<W>;
+
 impl<RW> ConnectionStream<RW> {
     pub fn new(stream: RW) -> Self {
         Self { stream: stream }
+    }
+}
+
+impl<RW> From<RW> for ConnectionStream<BufStream<RW>>
+where
+    RW: AsyncRead + AsyncWrite,
+{
+    fn from(value: RW) -> Self {
+        Self::new(BufStream::new(value))
+    }
+}
+
+impl<R> ConnectionReader<BufReader<R>>
+where
+    R: AsyncRead,
+{
+    pub fn from_read(value: R) -> Self {
+        Self::new(BufReader::new(value))
+    }
+}
+
+impl<W> ConnectionWriter<BufWriter<W>>
+where
+    W: AsyncWrite,
+{
+    pub fn from_write(value: W) -> Self {
+        Self::new(BufWriter::new(value))
     }
 }
 

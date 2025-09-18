@@ -1,6 +1,20 @@
 use crate::request::Request;
 use std::fmt;
 
+/// Error type of response.
+///
+/// All errors returned by server should have the following format:
+///
+/// ```plaintext
+/// <TAG> Error <CODE>
+/// ```
+///
+/// # Examples:
+///
+/// ```plaintext
+/// A000 Error BadCommand
+/// A001 Error Unauthorized
+/// ```
 #[derive(Debug)]
 pub enum ResponseError {
     BadCommand,
@@ -20,12 +34,21 @@ impl fmt::Display for ResponseError {
     }
 }
 
+/// Generic response body.
+///
+/// A generic response body may be one of the following responses:
+///
+/// - `Success`: Command was processed successfully, usually likes `<TAG> Success <OPTIONAL STRING>`
+/// - `Error`: Error occurred when peocessing command, usually likes `<TAG> Error <CODE>`
+/// - `Recv`: Received command from other users, usually likes `* Recv <MSG>`
 #[derive(Debug)]
 pub enum ResponseBody {
-    Success(String),
+    Success(Option<String>),
     Error(ResponseError),
+    Recv(String),
 }
 
+/// Generic response, with optional request info.
 #[derive(Debug)]
 pub struct Response {
     pub request: Option<Request>,
@@ -37,7 +60,7 @@ impl Response {
         Self { request, body }
     }
 
-    pub fn success(request: Option<Request>, msg: String) -> Self {
+    pub fn success(request: Option<Request>, msg: Option<String>) -> Self {
         Response::new(request, ResponseBody::Success(msg))
     }
 
@@ -46,11 +69,23 @@ impl Response {
     }
 }
 
-impl ToString for Response {
-    fn to_string(&self) -> String {
-        match &self.body {
-            ResponseBody::Success(msg) => format!("Success {}", msg),
-            ResponseBody::Error(msg) => format!("Error {}", msg),
-        }
+impl fmt::Display for Response {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} {}",
+            match &self.request {
+                Some(request) => request.tag.as_str(),
+                None => "*",
+            },
+            match &self.body {
+                ResponseBody::Success(msg) => match msg {
+                    Some(msg) => format!("Success {}", msg),
+                    None => format!("Success"),
+                },
+                ResponseBody::Error(msg) => format!("Error {}", msg),
+                ResponseBody::Recv(msg) => format!("Recv {}", msg),
+            }
+        )
     }
 }
