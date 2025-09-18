@@ -9,6 +9,12 @@ pub enum TcError {
     #[error("Parse error: Invalid command '{0}'")]
     Parse(String),
 
+    #[error("Duplicate error: {0}")]
+    Duplicate(String),
+
+    #[error("NotFound error: {0}")]
+    NotFound(String),
+
     #[error("Unknown error: {0}")]
     Unknown(String),
 }

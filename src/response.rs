@@ -19,6 +19,8 @@ use std::fmt;
 pub enum ResponseError {
     BadCommand,
     Unauthorized,
+    Duplicate,
+    NotFound,
 }
 
 impl fmt::Display for ResponseError {
@@ -29,6 +31,8 @@ impl fmt::Display for ResponseError {
             match self {
                 ResponseError::BadCommand => "BadCommand",
                 ResponseError::Unauthorized => "Unauthorized",
+                ResponseError::Duplicate => "Duplicate",
+                ResponseError::NotFound => "NotFound",
             }
         )
     }

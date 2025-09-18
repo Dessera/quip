@@ -17,8 +17,8 @@ use tokio::{
 };
 
 pub struct SimpleServer {
-    pub listener: TcpListener,
-    pub users: Arc<Mutex<HashMap<String, MessageQueue>>>,
+    listener: TcpListener,
+    users: Arc<Mutex<HashMap<String, MessageQueue>>>,
 }
 
 impl SimpleServer {
@@ -31,6 +31,48 @@ impl SimpleServer {
             users: Arc::new(Mutex::new(HashMap::new())),
         })
     }
+
+    /// Add an user to [SimpleServer::users] list.
+    ///
+    /// This method will throw [TcError::Duplicate] if user already exists.
+    pub async fn create_user(&self, name: &str) -> TcResult<MessageQueue> {
+        let mut users = self.users.lock().await;
+
+        if users.contains_key(name) {
+            return Err(TcError::Duplicate(format!("User '{}' exists.", name)));
+        }
+
+        let user = MessageQueue::new();
+        users.insert(name.to_string(), user.clone());
+
+        Ok(user)
+    }
+
+    /// Remove an user from [SimpleServer::users].
+    pub async fn remove_user(&self, name: &str) {
+        let mut users = self.users.lock().await;
+        users.remove(name);
+    }
+
+    /// Rename an user in [SimpleServer::users].
+    ///
+    /// This method is safe for messages because it won't destruct queue.
+    pub async fn rename_user(&self, original: &str, name: &str) -> TcResult<()> {
+        let mut users = self.users.lock().await;
+        let user = match users.get(original) {
+            Some(user) => user.clone(),
+            None => return Err(TcError::NotFound(format!("No user named '{}'.", original))),
+        };
+
+        if users.contains_key(name) {
+            return Err(TcError::Duplicate(format!("User '{}' exists.", name)));
+        }
+
+        users.insert(name.to_string(), user);
+        users.remove(original);
+
+        Ok(())
+    }
 }
 
 impl SimpleServer {
@@ -40,24 +82,16 @@ impl SimpleServer {
         let mut writer = ConnectionWriter::from_write(&mut tx);
 
         let uname = self.serve_unauth(&mut reader, &mut writer).await?;
-        let user = MessageQueue::new();
-
-        {
-            let mut users = self.users.lock().await;
-            users.insert(uname.clone(), user.clone());
-        }
+        let user = self.create_user(uname.as_str()).await?;
 
         let notify = Arc::new(Notify::new());
 
         let res = tokio::try_join!(
-            self.serve_auth_read(user.clone(), &mut reader, notify.clone()),
+            self.serve_auth_read(uname.as_str(), user.clone(), &mut reader, notify.clone()),
             self.serve_auth_write(user, &mut writer, notify)
         );
 
-        {
-            let mut users = self.users.lock().await;
-            users.remove(uname.as_str());
-        }
+        self.remove_user(uname.as_str()).await;
 
         match res {
             Ok(_) => Ok(()),
@@ -130,6 +164,7 @@ impl SimpleServer {
 
     async fn serve_auth_read<R>(
         &self,
+        name: &str,
         queue: MessageQueue,
         reader: &mut ConnectionReader<R>,
         notify: Arc<Notify>,
@@ -138,7 +173,7 @@ impl SimpleServer {
         R: AsyncBufReadExt + Unpin,
     {
         loop {
-            let _request = {
+            let request = {
                 match reader.get_request().await {
                     Ok(request) => request,
                     Err(TcError::Parse(_)) => {
@@ -151,6 +186,31 @@ impl SimpleServer {
                     Err(err) => return Err(err),
                 }
             };
+
+            match &request.body {
+                RequestBody::Login(uname) | RequestBody::SetName(uname) => {
+                    let uname_cp = uname.clone();
+
+                    let resp = match self.rename_user(name, uname_cp.as_str()).await {
+                        Ok(_) => Response::success(Some(request), Some(uname_cp)),
+                        Err(TcError::Duplicate(_)) => {
+                            Response::error(Some(request), ResponseError::Duplicate)
+                        }
+                        Err(TcError::NotFound(_)) => {
+                            Response::error(Some(request), ResponseError::NotFound)
+                        }
+                        Err(err) => return Err(err),
+                    };
+
+                    queue.push(resp).await;
+                }
+                RequestBody::Logout => return Err(TcError::Disconnect),
+                RequestBody::Nop => {
+                    queue.push(Response::success(Some(request), None)).await;
+                }
+            }
+
+            notify.notify_one();
         }
     }
 }
