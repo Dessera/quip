@@ -4,6 +4,8 @@ pub mod listener;
 pub mod service;
 pub mod user;
 
+use log::{info, warn};
+
 use crate::{
     TcResult,
     server::{backend::Backend, listener::Listener},
@@ -15,6 +17,11 @@ pub async fn run<L: Listener, B: Backend + Send + Sync + 'static>(
     listener: L,
     backend: B,
 ) -> TcResult<()> {
+    match listener.address() {
+        Ok(addr) => info!("Server listening on {}", addr),
+        Err(_) => info!("Server listening on unknown port"),
+    };
+
     let backend = Arc::new(backend);
     let mut handles = Vec::new();
     loop {
@@ -24,7 +31,11 @@ pub async fn run<L: Listener, B: Backend + Send + Sync + 'static>(
         };
 
         let backend = backend.clone();
-        let handle = tokio::spawn(async move { service::serve(&*backend, conn).await });
+        let handle = tokio::spawn(async move {
+            if let Err(err) = service::serve(&*backend, conn).await {
+                warn!("Connection handler exit with error:\n  {}", err);
+            }
+        });
 
         handles.push(handle);
     }
