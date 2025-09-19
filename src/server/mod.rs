@@ -1,31 +1,30 @@
 pub mod backend;
 pub mod connection;
+pub mod listener;
 pub mod service;
 pub mod user;
 
-use crate::{TcResult, server::backend::Backend};
-use log::{info, warn};
+use crate::{
+    TcResult,
+    server::{backend::Backend, listener::Listener},
+};
 use std::sync::Arc;
 
-pub async fn run<B: Backend + Send + Sync + 'static>(server: B) -> TcResult<()> {
-    match server.address() {
-        Ok(addr) => info!("Tchat server listening on {}", addr),
-        Err(_) => info!("Tchat server listening"),
-    };
-
-    let server = Arc::new(server);
+/// Server runner with any listener and backend implementation.
+pub async fn run<L: Listener, B: Backend + Send + Sync + 'static>(
+    listener: L,
+    backend: B,
+) -> TcResult<()> {
+    let backend = Arc::new(backend);
     let mut handles = Vec::new();
     loop {
-        let conn = match server.accept().await {
+        let conn = match listener.accept().await {
             Ok(conn) => conn,
-            Err(err) => {
-                warn!("Failed to accept connection: {}", err);
-                continue;
-            }
+            Err(_) => continue,
         };
 
-        let server = server.clone();
-        let handle = tokio::spawn(async move { server.serve(conn).await });
+        let backend = backend.clone();
+        let handle = tokio::spawn(async move { service::serve(&*backend, conn).await });
 
         handles.push(handle);
     }

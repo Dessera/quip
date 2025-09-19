@@ -1,25 +1,23 @@
-pub mod simple;
+pub mod memory;
 
-pub use self::simple::*;
-use crate::{
-    TcResult,
-    server::{connection::Connection, user::User},
-};
-use std::{future::Future, net::SocketAddr};
+#[cfg(test)]
+pub(crate) mod test;
 
-/// Server backend interface.
+pub use self::memory::*;
+use crate::{TcResult, server::user::User};
+use std::future::Future;
+
+/// Server backend interface, which implements storage of user.
 pub trait Backend {
-    /// Accept a connection from any source.
-    fn accept(&self) -> impl Future<Output = TcResult<Connection>> + Send;
-
-    /// Serve a connection.
-    fn serve(&self, conn: Connection) -> impl Future<Output = TcResult<()>> + Send;
-
-    /// Get server address.
-    fn address(&self) -> TcResult<SocketAddr>;
-
+    /// Add a user to backend.
     fn add_user(&self, user: User) -> impl Future<Output = TcResult<()>> + Send;
+
+    // Remove a user from backend.
     fn remove_user(&self, user: User) -> impl Future<Output = TcResult<()>> + Send;
+
+    /// Rename a user in backend.
     fn rename_user(&self, original: &str, name: &str) -> impl Future<Output = TcResult<()>> + Send;
+
+    /// Find a user from backend.
     fn find_user(&self, name: &str) -> impl Future<Output = TcResult<User>> + Send;
 }

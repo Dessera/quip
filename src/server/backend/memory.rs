@@ -1,0 +1,80 @@
+use crate::{
+    TcError, TcResult,
+    server::{backend::Backend, user::User},
+};
+use log::info;
+use std::{collections::HashMap, sync::Arc};
+use tokio::sync::Mutex;
+
+/// Memory backend implementation.
+///
+/// All users are stored in memory with a [`HashMap`].
+pub struct MemoryBackend {
+    users: Arc<Mutex<HashMap<String, User>>>,
+}
+
+impl MemoryBackend {
+    pub fn new() -> Self {
+        Self {
+            users: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+}
+
+impl Backend for MemoryBackend {
+    async fn add_user(&self, user: User) -> TcResult<()> {
+        let mut users = self.users.lock().await;
+        let user_data = user.data.lock().await;
+
+        if users.contains_key(&user_data.name) {
+            return Err(TcError::Duplicate(format!(
+                "User '{}' exists.",
+                user_data.name
+            )));
+        }
+
+        users.insert(user_data.name.clone(), user.clone());
+
+        info!("User {} has been authenticated.", user_data.name);
+
+        Ok(())
+    }
+
+    async fn remove_user(&self, user: User) -> TcResult<()> {
+        let mut users = self.users.lock().await;
+        let user_data = user.data.lock().await;
+
+        users.remove(&user_data.name);
+
+        info!("User {} has left.", user_data.name);
+
+        Ok(())
+    }
+
+    async fn rename_user(&self, original: &str, name: &str) -> TcResult<()> {
+        let mut users = self.users.lock().await;
+        let user = match users.get(original) {
+            Some(user) => user.clone(),
+            None => return Err(TcError::NotFound(format!("No user named '{}'.", original))),
+        };
+
+        if users.contains_key(name) {
+            return Err(TcError::Duplicate(format!("User '{}' exists.", name)));
+        }
+
+        users.insert(name.to_string(), user);
+        users.remove(original);
+
+        info!("User {} has renamed to {}.", original, name);
+
+        Ok(())
+    }
+
+    async fn find_user(&self, name: &str) -> TcResult<User> {
+        let users = self.users.lock().await;
+        match users.get(name) {
+            Some(user) => Ok(user.clone()),
+            None => return Err(TcError::NotFound(format!("No user named '{}'.", name))),
+        }
+    }
+}

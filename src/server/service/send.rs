@@ -20,7 +20,7 @@ where
         user_data.name.clone()
     };
 
-    let target = match server.find_user(receiver.as_str()).await {
+    let target = match server.find_user(&receiver).await {
         Ok(target) => target,
         Err(_) => return Ok(Response::error(Some(request), ResponseError::NotFound)),
     };

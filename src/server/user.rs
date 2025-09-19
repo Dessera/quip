@@ -10,6 +10,7 @@ pub struct UserData {
     pub name: String,
 }
 
+/// User handler for server.
 #[derive(Debug, Clone)]
 pub struct User {
     queue: Arc<Mutex<VecDeque<Response>>>,

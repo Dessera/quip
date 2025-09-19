@@ -11,6 +11,10 @@ use crate::{
 };
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 
+/// Write task for a connection.
+///
+/// All responses should be written in this, otherwise client may not be able
+/// to process the response correctly.
 pub async fn serve_write<S, W>(
     _server: &S,
     user: User,
@@ -26,6 +30,9 @@ where
     }
 }
 
+/// Read task for a connection.
+///
+/// This task reads and parse all requests and push responses to write task.
 pub async fn serve_read<S, R>(
     server: &S,
     user: User,

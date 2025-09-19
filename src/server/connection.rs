@@ -5,6 +5,9 @@ use tokio::{
     net::TcpStream,
 };
 
+/// Wrapper for real socket.
+///
+/// TODO: Support more protocol?
 pub struct Connection {
     pub socket: TcpStream,
     pub addr: SocketAddr,
@@ -16,12 +19,21 @@ impl Connection {
     }
 }
 
+/// Stream for read [`Request`] and write [`Response`] with any IO port.
 pub struct ConnectionStream<RW> {
     stream: RW,
 }
 
+/// Reader for read [`Request`] from any IO port.
+///
+/// Actually, there is no difference between [`ConnectionStream`] and
+/// [`ConnectionReader`]
 pub type ConnectionReader<R> = ConnectionStream<R>;
 
+/// Reader for write [`Response`] to any IO port.
+///
+/// Actually, there is no difference between [`ConnectionStream`] and
+/// [`ConnectionWriter`]
 pub type ConnectionWriter<W> = ConnectionStream<W>;
 
 impl<RW> ConnectionStream<RW> {
@@ -58,6 +70,7 @@ where
 }
 
 impl<RW: AsyncBufReadExt + Unpin> ConnectionStream<RW> {
+    /// Get [`Request`] from socket, terminate with `\n`.
     pub async fn get_request(&mut self) -> TcResult<Request> {
         let mut buffer = String::new();
         let mut zero_cnt: usize = 0;
@@ -74,11 +87,12 @@ impl<RW: AsyncBufReadExt + Unpin> ConnectionStream<RW> {
             };
         }
 
-        Request::try_from(buffer.as_str())
+        Request::try_from(buffer)
     }
 }
 
 impl<RW: AsyncWriteExt + Unpin> ConnectionStream<RW> {
+    /// Write [`Response`] to socket, end with `\n`.
     pub async fn write_response(&mut self, resp: Response) -> TcResult<()> {
         self.stream.write_all(resp.to_string().as_bytes()).await?;
         self.stream.write_all("\n".as_bytes()).await?;

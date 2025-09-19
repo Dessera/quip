@@ -11,6 +11,8 @@ use crate::{
 };
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 
+/// Serve entry for unauthenticated connection, which waits for `Login` command
+/// and go to next step.
 pub async fn serve<S, R, W>(
     server: &S,
     reader: &mut ConnectionReader<R>,
@@ -51,5 +53,5 @@ where
     };
 
     writer.write_response(resp).await?;
-    Ok(server.find_user(name.as_str()).await?)
+    Ok(server.find_user(&name).await?)
 }
