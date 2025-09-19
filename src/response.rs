@@ -49,7 +49,7 @@ impl fmt::Display for ResponseError {
 pub enum ResponseBody {
     Success(Option<String>),
     Error(ResponseError),
-    Recv(String),
+    Recv(String, String),
 }
 
 /// Generic response, with optional request info.
@@ -72,8 +72,8 @@ impl Response {
         Response::new(request, ResponseBody::Error(err))
     }
 
-    pub fn recv(request: Option<Request>, msg: String) -> Self {
-        Response::new(request, ResponseBody::Recv(msg))
+    pub fn recv(request: Option<Request>, sender: String, msg: String) -> Self {
+        Response::new(request, ResponseBody::Recv(sender, msg))
     }
 }
 
@@ -92,7 +92,7 @@ impl fmt::Display for Response {
                     None => format!("Success"),
                 },
                 ResponseBody::Error(msg) => format!("Error {}", msg),
-                ResponseBody::Recv(msg) => format!("Recv {}", msg),
+                ResponseBody::Recv(sender, msg) => format!("Recv {} {}", sender, msg),
             }
         )
     }

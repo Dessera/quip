@@ -6,12 +6,7 @@ tchat is a simple chat protocol, which is developing now.
 
 - [ ] Server
   - [x] Basic auth
-  - [ ] Message transmission
+  - [x] Message transmission
   - [ ] Offline message
 - [ ] Client
 - [ ] Doc
-
-## Bugs
-
-- [ ] Client exits when login with a duplicated name
-- [ ] Recv should return message sender

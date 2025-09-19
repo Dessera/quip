@@ -1,33 +1,43 @@
+use crate::{TcResult, response::Response, server::connection::ConnectionWriter};
+use std::{collections::VecDeque, sync::Arc};
 use tokio::{
     io::AsyncWriteExt,
     sync::{Mutex, Notify},
 };
 
-use crate::{TcResult, response::Response, server::connection::ConnectionWriter};
-use std::{collections::VecDeque, sync::Arc};
-
-#[derive(Debug, Clone)]
-pub struct MessageQueue {
-    queue: Arc<Mutex<VecDeque<Response>>>,
-    notify: Arc<Notify>,
+#[derive(Debug)]
+pub struct UserData {
+    pub name: String,
 }
 
-impl MessageQueue {
-    pub fn new() -> Self {
+#[derive(Debug, Clone)]
+pub struct User {
+    queue: Arc<Mutex<VecDeque<Response>>>,
+    pub notify: Arc<Notify>,
+    pub data: Arc<Mutex<UserData>>,
+}
+
+impl User {
+    pub fn new(name: String) -> Self {
         Self {
             queue: Arc::new(Mutex::new(VecDeque::new())),
             notify: Arc::new(Notify::new()),
+            data: Arc::new(Mutex::new(UserData { name })),
         }
     }
 
-    pub async fn push(&self, resp: Response) {
+    /// Push a response into queue.
+    pub async fn push_resp(&self, resp: Response) {
         let mut queue = self.queue.lock().await;
         queue.push_back(resp);
 
         self.notify.notify_one();
     }
 
-    pub async fn transmit<W>(&self, writer: &mut ConnectionWriter<W>) -> TcResult<()>
+    /// Write all responses to specific writer.
+    ///
+    /// All responses should be sended via this method (after authenticated).
+    pub async fn write_all<W>(&self, writer: &mut ConnectionWriter<W>) -> TcResult<()>
     where
         W: AsyncWriteExt + Unpin,
     {
@@ -43,9 +53,5 @@ impl MessageQueue {
         }
 
         Ok(())
-    }
-
-    pub async fn notified(&self) {
-        self.notify.notified().await
     }
 }
