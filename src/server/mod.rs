@@ -1,7 +1,7 @@
 pub mod backend;
-pub mod connection;
 pub mod listener;
 pub mod service;
+pub mod stream;
 pub mod user;
 
 use log::{info, warn};

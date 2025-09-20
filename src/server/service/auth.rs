@@ -4,12 +4,12 @@ use crate::{
     response::{Response, ResponseError},
     server::{
         backend::Backend,
-        connection::{ConnectionReader, ConnectionWriter},
         service::{login, send},
+        stream::{QuipBufReader, QuipBufWriter},
         user::User,
     },
 };
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 /// Write task for a connection.
 ///
@@ -18,11 +18,11 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 pub async fn serve_write<S, W>(
     _server: &S,
     user: User,
-    writer: &mut ConnectionWriter<W>,
+    writer: &mut QuipBufWriter<W>,
 ) -> QuipResult<()>
 where
     S: Backend,
-    W: AsyncWriteExt + Unpin,
+    W: AsyncWrite + Unpin,
 {
     loop {
         user.notify.notified().await;
@@ -36,11 +36,11 @@ where
 pub async fn serve_read<S, R>(
     server: &S,
     user: User,
-    reader: &mut ConnectionReader<R>,
+    reader: &mut QuipBufReader<R>,
 ) -> QuipResult<()>
 where
     S: Backend,
-    R: AsyncBufReadExt + Unpin,
+    R: AsyncRead + Unpin,
 {
     loop {
         let request = {

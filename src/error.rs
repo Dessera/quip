@@ -3,6 +3,9 @@ pub enum QuipError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
+    #[error("SSL/TLS error: {0}")]
+    Tls(#[from] native_tls::Error),
+
     #[error("Client has disconnected")]
     Disconnect,
 

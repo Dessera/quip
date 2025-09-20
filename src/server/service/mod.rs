@@ -7,16 +7,16 @@ use crate::{
     QuipError, QuipResult,
     server::{
         backend::Backend,
-        connection::{Connection, ConnectionReader, ConnectionWriter},
+        stream::{QuipBufReader, QuipBufWriter, QuipStream},
     },
 };
 
 /// General serve entry, which represents the entire lifetime of a connection.
-pub async fn serve<S: Backend>(server: &S, conn: Connection) -> QuipResult<()> {
-    let (mut rx, mut tx) = conn.socket.into_split();
+pub async fn serve<S: Backend>(server: &S, conn: QuipStream) -> QuipResult<()> {
+    let (rx, tx) = conn.duplex();
 
-    let mut rx = ConnectionReader::from_read(&mut rx);
-    let mut tx = ConnectionWriter::from_write(&mut tx);
+    let mut rx = QuipBufReader::new(rx);
+    let mut tx = QuipBufWriter::new(tx);
 
     let user = match unauth::serve(server, &mut rx, &mut tx).await {
         Ok(user) => user,

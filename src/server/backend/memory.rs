@@ -35,6 +35,9 @@ impl Backend for MemoryBackend {
             return match user_data.status {
                 UserStatus::Cache => {
                     user_data.status = UserStatus::Auth;
+
+                    info!("User {} has been authenticated.", name_ref);
+
                     Ok(user.clone())
                 }
                 _ => Err(QuipError::Duplicate(format!(

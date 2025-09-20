@@ -1,10 +1,20 @@
 use crate::{
     QuipResult,
-    server::{connection::Connection, listener::Listener},
+    server::{
+        listener::Listener,
+        stream::{AsyncReadHalf, AsyncStream, AsyncWriteHalf, QuipStream},
+    },
 };
 use log::info;
 use std::net::SocketAddr;
-use tokio::net::{TcpListener as TokioTcpListener, ToSocketAddrs};
+use tokio::net::{TcpListener as TokioTcpListener, TcpStream, ToSocketAddrs};
+
+impl AsyncStream for TcpStream {
+    fn duplex(self: Box<Self>) -> (Box<dyn AsyncReadHalf>, Box<dyn AsyncWriteHalf>) {
+        let (rx, tx) = self.into_split();
+        (Box::new(rx), Box::new(tx))
+    }
+}
 
 /// Wrapper for [`tokio::net::TcpListener`].
 pub struct TcpListener(TokioTcpListener);
@@ -17,11 +27,11 @@ impl TcpListener {
 }
 
 impl Listener for TcpListener {
-    async fn accept(&self) -> QuipResult<Connection> {
+    async fn accept(&self) -> QuipResult<QuipStream> {
         let (socket, addr) = self.0.accept().await?;
         info!("Tcp socket {} accepted", addr);
 
-        Ok(Connection::new(socket, addr))
+        Ok(QuipStream::new(socket))
     }
 
     fn address(&self) -> QuipResult<SocketAddr> {

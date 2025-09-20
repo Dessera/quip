@@ -1,7 +1,7 @@
-use crate::{QuipResult, response::Response, server::connection::ConnectionWriter};
+use crate::{QuipResult, response::Response, server::stream::QuipBufWriter};
 use std::{collections::VecDeque, sync::Arc};
 use tokio::{
-    io::AsyncWriteExt,
+    io::AsyncWrite,
     sync::{Mutex, Notify},
 };
 
@@ -52,9 +52,9 @@ impl User {
     /// Write all responses to specific writer.
     ///
     /// All responses should be sended via this method (after authenticated).
-    pub async fn write_all<W>(&self, writer: &mut ConnectionWriter<W>) -> QuipResult<()>
+    pub async fn write_all<W>(&self, writer: &mut QuipBufWriter<W>) -> QuipResult<()>
     where
-        W: AsyncWriteExt + Unpin,
+        W: AsyncWrite + Unpin,
     {
         let mut queue = self.queue.lock().await;
 

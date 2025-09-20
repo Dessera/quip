@@ -4,24 +4,24 @@ use crate::{
     response::{Response, ResponseError},
     server::{
         backend::Backend,
-        connection::{ConnectionReader, ConnectionWriter},
         service::login,
+        stream::{QuipBufReader, QuipBufWriter},
         user::User,
     },
 };
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 /// Serve entry for unauthenticated connection, which waits for `Login` command
 /// and go to next step.
 pub async fn serve<S, R, W>(
     server: &S,
-    reader: &mut ConnectionReader<R>,
-    writer: &mut ConnectionWriter<W>,
+    reader: &mut QuipBufReader<R>,
+    writer: &mut QuipBufWriter<W>,
 ) -> QuipResult<User>
 where
     S: Backend,
-    R: AsyncBufReadExt + Unpin,
-    W: AsyncWriteExt + Unpin,
+    R: AsyncRead + Unpin,
+    W: AsyncWrite + Unpin,
 {
     let (name, resp) = loop {
         let request = match reader.get_request().await {

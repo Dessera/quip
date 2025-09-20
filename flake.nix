@@ -1,5 +1,5 @@
 {
-  description = "Simple chat protocol.";
+  description = "Quip is a simple chat protocol, which is developing now.";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -24,6 +24,12 @@
       perSystem =
         { self', pkgs, ... }:
         {
+          rust-project.crates = {
+            quip = {
+              crane.args.buildInputs = with pkgs; [ openssl ];
+            };
+          };
+
           packages.default = self'.packages.quip;
 
           devShells.default = pkgs.mkShell {
