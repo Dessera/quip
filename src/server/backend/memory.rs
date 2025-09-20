@@ -1,6 +1,9 @@
 use crate::{
     TcError, TcResult,
-    server::{backend::Backend, user::User},
+    server::{
+        backend::Backend,
+        user::{User, UserStatus},
+    },
 };
 use log::info;
 use std::{collections::HashMap, sync::Arc};
@@ -22,22 +25,31 @@ impl MemoryBackend {
 }
 
 impl Backend for MemoryBackend {
-    async fn add_user(&self, user: User) -> TcResult<()> {
+    async fn add_user(&self, name: impl AsRef<str> + Into<String> + Send) -> TcResult<User> {
         let mut users = self.users.lock().await;
-        let user_data = user.data.lock().await;
+        let name_ref = name.as_ref();
 
-        if users.contains_key(&user_data.name) {
-            return Err(TcError::Duplicate(format!(
-                "User '{}' exists.",
-                user_data.name
-            )));
+        if let Some(user) = users.get(name_ref) {
+            let mut user_data = user.data.lock().await;
+
+            return match user_data.status {
+                UserStatus::Cache => {
+                    user_data.status = UserStatus::Auth;
+                    Ok(user.clone())
+                }
+                _ => Err(TcError::Duplicate(format!(
+                    "User '{}' exists.",
+                    user_data.name
+                ))),
+            };
         }
 
-        users.insert(user_data.name.clone(), user.clone());
+        info!("User {} has been authenticated.", name_ref);
 
-        info!("User {} has been authenticated.", user_data.name);
+        let user = User::new(name_ref, UserStatus::Auth);
+        users.insert(name.into(), user.clone());
 
-        Ok(())
+        Ok(user)
     }
 
     async fn remove_user(&self, user: User) -> TcResult<()> {
@@ -75,6 +87,20 @@ impl Backend for MemoryBackend {
         match users.get(name) {
             Some(user) => Ok(user.clone()),
             None => return Err(TcError::NotFound(format!("No user named '{}'.", name))),
+        }
+    }
+
+    async fn ensure_user(&self, name: impl AsRef<str> + Into<String> + Send) -> TcResult<User> {
+        let mut users = self.users.lock().await;
+        let name_ref = name.as_ref();
+
+        match users.get(name_ref) {
+            Some(user) => Ok(user.clone()),
+            None => {
+                let user = User::new(name_ref, UserStatus::Cache);
+                users.insert(name.into(), user.clone());
+                Ok(user)
+            }
         }
     }
 }

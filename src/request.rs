@@ -5,7 +5,7 @@ use crate::TcError;
 /// A general request body may be one of the following requests:
 ///
 /// - `Send`: Send message to another user or group, i.e.
-///   `<TAG> Send <USER> <MESSAGE>` or `<TAG> Send <GROUP>:<USER> <MESSAGE>`.
+///   `<TAG> Send <USER> <MESSAGE>` or `<TAG> Send G:<GROUP> <MESSAGE>`.
 /// - `Login`/`SetName`: Authenticate connection with a user name, i.e.
 ///   `<TAG> Login|SetName <NAME>`.
 /// - `Logout`: Disconnect immediately, i.e. `<TAG> Logout`.

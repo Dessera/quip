@@ -18,7 +18,7 @@ where
         _ => return Ok(Response::error(Some(request), ResponseError::BadCommand)),
     };
 
-    let resp = match server.add_user(User::new(name.clone())).await {
+    let resp = match server.add_user(&name).await {
         Ok(_) => Response::success(Some(request), Some(name)),
         Err(TcError::Duplicate(_)) => Response::error(Some(request), ResponseError::Duplicate),
         Err(err) => return Err(err),

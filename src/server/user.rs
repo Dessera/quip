@@ -5,9 +5,17 @@ use tokio::{
     sync::{Mutex, Notify},
 };
 
+/// User status to cache message before login.
+#[derive(Debug, PartialEq, Eq)]
+pub enum UserStatus {
+    Cache,
+    Auth,
+}
+
 #[derive(Debug)]
 pub struct UserData {
     pub name: String,
+    pub status: UserStatus,
 }
 
 /// User handler for server.
@@ -19,20 +27,26 @@ pub struct User {
 }
 
 impl User {
-    pub fn new(name: String) -> Self {
+    pub fn new(name: impl Into<String>, status: UserStatus) -> Self {
         Self {
             queue: Arc::new(Mutex::new(VecDeque::new())),
             notify: Arc::new(Notify::new()),
-            data: Arc::new(Mutex::new(UserData { name })),
+            data: Arc::new(Mutex::new(UserData {
+                name: name.into(),
+                status,
+            })),
         }
     }
 
     /// Push a response into queue.
     pub async fn push_resp(&self, resp: Response) {
         let mut queue = self.queue.lock().await;
+        let user_data = self.data.lock().await;
         queue.push_back(resp);
 
-        self.notify.notify_one();
+        if user_data.status != UserStatus::Cache {
+            self.notify.notify_one();
+        }
     }
 
     /// Write all responses to specific writer.

@@ -40,7 +40,7 @@ impl fmt::Display for ResponseError {
 ///
 /// - `Success`: Command was processed successfully, i.e. `<TAG> Success <OPTIONAL STRING>`.
 /// - `Error`: Error occurred when peocessing command, i.e. `<TAG> Error <CODE>`.
-/// - `Recv`: Received command from other users, i.e. `* Recv <MSG>`.
+/// - `Recv`: Received command from other users, i.e. `* Recv (<GROUP>:)<USER> <MSG>`.
 #[derive(Debug)]
 pub enum ResponseBody {
     Success(Option<String>),

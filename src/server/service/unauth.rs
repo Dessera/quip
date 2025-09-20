@@ -52,6 +52,8 @@ where
         writer.write_response(resp).await?;
     };
 
-    writer.write_response(resp).await?;
-    Ok(server.find_user(&name).await?)
+    let user = server.find_user(&name).await?;
+    user.push_resp(resp).await;
+
+    Ok(user)
 }

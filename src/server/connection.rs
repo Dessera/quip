@@ -69,7 +69,10 @@ where
     }
 }
 
-impl<RW: AsyncBufReadExt + Unpin> ConnectionStream<RW> {
+impl<RW> ConnectionStream<RW>
+where
+    RW: AsyncBufReadExt + Unpin,
+{
     /// Get [`Request`] from socket, terminate with `\n`.
     pub async fn get_request(&mut self) -> TcResult<Request> {
         let mut buffer = String::new();
@@ -91,7 +94,10 @@ impl<RW: AsyncBufReadExt + Unpin> ConnectionStream<RW> {
     }
 }
 
-impl<RW: AsyncWriteExt + Unpin> ConnectionStream<RW> {
+impl<RW> ConnectionStream<RW>
+where
+    RW: AsyncWriteExt + Unpin,
+{
     /// Write [`Response`] to socket, end with `\n`.
     pub async fn write_response(&mut self, resp: Response) -> TcResult<()> {
         self.stream.write_all(resp.to_string().as_bytes()).await?;
