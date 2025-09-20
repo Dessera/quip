@@ -1,11 +1,11 @@
 use log::error;
-use tchat::{
-    TcResult,
+use quip::{
+    QuipResult,
     server::{self, backend::MemoryBackend, listener::TcpListener},
 };
 
 #[tokio::main]
-async fn main() -> TcResult<()> {
+async fn main() -> QuipResult<()> {
     env_logger::init();
 
     let listener = match TcpListener::bind("0.0.0.0:1145").await {

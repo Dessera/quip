@@ -1,5 +1,5 @@
 #[derive(thiserror::Error, Debug)]
-pub enum TcError {
+pub enum QuipError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
@@ -19,4 +19,4 @@ pub enum TcError {
     Unknown(String),
 }
 
-pub type TcResult<T> = Result<T, TcError>;
+pub type QuipResult<T> = Result<T, QuipError>;

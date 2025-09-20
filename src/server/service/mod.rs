@@ -4,7 +4,7 @@ pub mod send;
 pub mod unauth;
 
 use crate::{
-    TcError, TcResult,
+    QuipError, QuipResult,
     server::{
         backend::Backend,
         connection::{Connection, ConnectionReader, ConnectionWriter},
@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// General serve entry, which represents the entire lifetime of a connection.
-pub async fn serve<S: Backend>(server: &S, conn: Connection) -> TcResult<()> {
+pub async fn serve<S: Backend>(server: &S, conn: Connection) -> QuipResult<()> {
     let (mut rx, mut tx) = conn.socket.into_split();
 
     let mut rx = ConnectionReader::from_read(&mut rx);
@@ -20,7 +20,7 @@ pub async fn serve<S: Backend>(server: &S, conn: Connection) -> TcResult<()> {
 
     let user = match unauth::serve(server, &mut rx, &mut tx).await {
         Ok(user) => user,
-        Err(TcError::Disconnect) => return Ok(()),
+        Err(QuipError::Disconnect) => return Ok(()),
         Err(err) => return Err(err),
     };
 
@@ -32,7 +32,7 @@ pub async fn serve<S: Backend>(server: &S, conn: Connection) -> TcResult<()> {
     server.remove_user(user).await?;
 
     match res {
-        Ok(_) | Err(TcError::Disconnect) => Ok(()),
+        Ok(_) | Err(QuipError::Disconnect) => Ok(()),
         Err(err) => Err(err),
     }
 }

@@ -1,5 +1,5 @@
 [package]
-name = "tchat"
+name = "quip"
 version = "0.1.0"
 authors = ["Dessera <dessera@qq.com>"]
 description = "Simple chat protocol"
@@ -7,7 +7,7 @@ license = "LGPL-3.0"
 edition = "2024"
 
 [[bin]]
-name = "tchat-server"
+name = "quip-server"
 test = false
 bench = false
 

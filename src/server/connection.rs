@@ -1,4 +1,4 @@
-use crate::{TcError, TcResult, request::Request, response::Response};
+use crate::{QuipError, QuipResult, request::Request, response::Response};
 use std::net::SocketAddr;
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, BufStream, BufWriter},
@@ -74,7 +74,7 @@ where
     RW: AsyncBufReadExt + Unpin,
 {
     /// Get [`Request`] from socket, terminate with `\n`.
-    pub async fn get_request(&mut self) -> TcResult<Request> {
+    pub async fn get_request(&mut self) -> QuipResult<Request> {
         let mut buffer = String::new();
         let mut zero_cnt: usize = 0;
         loop {
@@ -83,7 +83,7 @@ where
                     zero_cnt += 1;
                     match zero_cnt {
                         1 => continue,
-                        _ => return Err(TcError::Disconnect),
+                        _ => return Err(QuipError::Disconnect),
                     }
                 }
                 _ => break,
@@ -99,7 +99,7 @@ where
     RW: AsyncWriteExt + Unpin,
 {
     /// Write [`Response`] to socket, end with `\n`.
-    pub async fn write_response(&mut self, resp: Response) -> TcResult<()> {
+    pub async fn write_response(&mut self, resp: Response) -> QuipResult<()> {
         self.stream.write_all(resp.to_string().as_bytes()).await?;
         self.stream.write_all("\n".as_bytes()).await?;
         Ok(self.stream.flush().await?)

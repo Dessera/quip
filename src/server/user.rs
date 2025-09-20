@@ -1,4 +1,4 @@
-use crate::{TcResult, response::Response, server::connection::ConnectionWriter};
+use crate::{QuipResult, response::Response, server::connection::ConnectionWriter};
 use std::{collections::VecDeque, sync::Arc};
 use tokio::{
     io::AsyncWriteExt,
@@ -52,7 +52,7 @@ impl User {
     /// Write all responses to specific writer.
     ///
     /// All responses should be sended via this method (after authenticated).
-    pub async fn write_all<W>(&self, writer: &mut ConnectionWriter<W>) -> TcResult<()>
+    pub async fn write_all<W>(&self, writer: &mut ConnectionWriter<W>) -> QuipResult<()>
     where
         W: AsyncWriteExt + Unpin,
     {

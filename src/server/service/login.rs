@@ -1,5 +1,5 @@
 use crate::{
-    TcError, TcResult,
+    QuipError, QuipResult,
     request::{Request, RequestBody},
     response::{Response, ResponseError},
     server::{backend::Backend, user::User},
@@ -9,7 +9,7 @@ use crate::{
 ///
 /// If a connection is not authenticated, `Login` command will create a new
 /// [`User`] for it.
-pub async fn serve_unauth<S>(server: &S, request: Request) -> TcResult<Response>
+pub async fn serve_unauth<S>(server: &S, request: Request) -> QuipResult<Response>
 where
     S: Backend,
 {
@@ -20,7 +20,7 @@ where
 
     let resp = match server.add_user(&name).await {
         Ok(_) => Response::success(Some(request), Some(name)),
-        Err(TcError::Duplicate(_)) => Response::error(Some(request), ResponseError::Duplicate),
+        Err(QuipError::Duplicate(_)) => Response::error(Some(request), ResponseError::Duplicate),
         Err(err) => return Err(err),
     };
 
@@ -30,7 +30,7 @@ where
 /// Serve `Login` command when authenticated.
 ///
 /// If a connection is authenticated, `Login` command will change its name.
-pub async fn serve<S>(server: &S, request: Request, user: &User) -> TcResult<Response>
+pub async fn serve<S>(server: &S, request: Request, user: &User) -> QuipResult<Response>
 where
     S: Backend,
 {
@@ -50,8 +50,8 @@ where
             user_data.name = name.clone();
             Response::success(Some(request), Some(name))
         }
-        Err(TcError::Duplicate(_)) => Response::error(Some(request), ResponseError::Duplicate),
-        Err(TcError::NotFound(_)) => Response::error(Some(request), ResponseError::NotFound),
+        Err(QuipError::Duplicate(_)) => Response::error(Some(request), ResponseError::Duplicate),
+        Err(QuipError::NotFound(_)) => Response::error(Some(request), ResponseError::NotFound),
         Err(err) => return Err(err),
     };
 

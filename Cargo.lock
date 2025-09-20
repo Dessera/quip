@@ -308,6 +308,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "quip"
+version = "0.1.0"
+dependencies = [
+ "env_logger",
+ "log",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -435,16 +445,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
-]
-
-[[package]]
-name = "tchat"
-version = "0.1.0"
-dependencies = [
- "env_logger",
- "log",
- "thiserror",
- "tokio",
 ]
 
 [[package]]

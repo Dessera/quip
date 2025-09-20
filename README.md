@@ -1,8 +1,8 @@
-# Tchat
+# Quip
 
-Tchat is a simple chat protocol, which is developing now.
+Quip is a simple chat protocol, which is developing now.
 
-Tchat is not a safe protocol because it dose not implements a "REAL" authentication. Basically, it's just a demo protocol only for learning purpose.
+Quip is not a safe protocol because it dose not implements a "REAL" authentication. Basically, it's just a demo protocol only for learning purpose.
 
 ## Critical Unsafe Issues
 

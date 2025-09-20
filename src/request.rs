@@ -1,4 +1,4 @@
-use crate::TcError;
+use crate::QuipError;
 
 /// General request body.
 ///
@@ -36,14 +36,14 @@ impl Request {
 }
 
 impl TryFrom<String> for Request {
-    type Error = TcError;
+    type Error = QuipError;
 
     // TODO: Need a parser.
     fn try_from(value: String) -> Result<Self, Self::Error> {
         let parts: Vec<&str> = value.trim().split(' ').collect();
 
         if parts.len() < 1 {
-            return Err(TcError::Parse(value));
+            return Err(QuipError::Parse(value));
         }
 
         let tag = parts[0];
@@ -53,7 +53,7 @@ impl TryFrom<String> for Request {
             ["SetName", name] => RequestBody::SetName(name.to_string()),
             ["Logout"] => RequestBody::Logout,
             ["Nop"] => RequestBody::Nop,
-            _ => return Err(TcError::Parse(value)),
+            _ => return Err(QuipError::Parse(value)),
         };
 
         Ok(Request::new(tag, body))
@@ -61,7 +61,7 @@ impl TryFrom<String> for Request {
 }
 
 impl TryFrom<&str> for Request {
-    type Error = TcError;
+    type Error = QuipError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         Request::try_from(value.to_string())

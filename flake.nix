@@ -24,7 +24,7 @@
       perSystem =
         { self', pkgs, ... }:
         {
-          packages.default = self'.packages.tchat;
+          packages.default = self'.packages.quip;
 
           devShells.default = pkgs.mkShell {
             inputsFrom = [ self'.devShells.rust ];

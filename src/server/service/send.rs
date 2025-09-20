@@ -1,12 +1,12 @@
 use crate::{
-    TcResult,
+    QuipResult,
     request::{Request, RequestBody},
     response::{Response, ResponseError},
     server::{backend::Backend, user::User},
 };
 
 /// Serve `Send` command.
-pub async fn serve<S>(server: &S, request: Request, user: &User) -> TcResult<Response>
+pub async fn serve<S>(server: &S, request: Request, user: &User) -> QuipResult<Response>
 where
     S: Backend,
 {

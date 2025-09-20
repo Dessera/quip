@@ -1,5 +1,5 @@
 use crate::{
-    TcError, TcResult,
+    QuipError, QuipResult,
     server::{
         backend::Backend,
         user::{User, UserStatus},
@@ -25,7 +25,7 @@ impl MemoryBackend {
 }
 
 impl Backend for MemoryBackend {
-    async fn add_user(&self, name: impl AsRef<str> + Into<String> + Send) -> TcResult<User> {
+    async fn add_user(&self, name: impl AsRef<str> + Into<String> + Send) -> QuipResult<User> {
         let mut users = self.users.lock().await;
         let name_ref = name.as_ref();
 
@@ -37,7 +37,7 @@ impl Backend for MemoryBackend {
                     user_data.status = UserStatus::Auth;
                     Ok(user.clone())
                 }
-                _ => Err(TcError::Duplicate(format!(
+                _ => Err(QuipError::Duplicate(format!(
                     "User '{}' exists.",
                     user_data.name
                 ))),
@@ -52,7 +52,7 @@ impl Backend for MemoryBackend {
         Ok(user)
     }
 
-    async fn remove_user(&self, user: User) -> TcResult<()> {
+    async fn remove_user(&self, user: User) -> QuipResult<()> {
         let mut users = self.users.lock().await;
         let user_data = user.data.lock().await;
 
@@ -63,15 +63,20 @@ impl Backend for MemoryBackend {
         Ok(())
     }
 
-    async fn rename_user(&self, original: &str, name: &str) -> TcResult<()> {
+    async fn rename_user(&self, original: &str, name: &str) -> QuipResult<()> {
         let mut users = self.users.lock().await;
         let user = match users.get(original) {
             Some(user) => user.clone(),
-            None => return Err(TcError::NotFound(format!("No user named '{}'.", original))),
+            None => {
+                return Err(QuipError::NotFound(format!(
+                    "No user named '{}'.",
+                    original
+                )));
+            }
         };
 
         if users.contains_key(name) {
-            return Err(TcError::Duplicate(format!("User '{}' exists.", name)));
+            return Err(QuipError::Duplicate(format!("User '{}' exists.", name)));
         }
 
         users.insert(name.to_string(), user);
@@ -82,15 +87,15 @@ impl Backend for MemoryBackend {
         Ok(())
     }
 
-    async fn find_user(&self, name: &str) -> TcResult<User> {
+    async fn find_user(&self, name: &str) -> QuipResult<User> {
         let users = self.users.lock().await;
         match users.get(name) {
             Some(user) => Ok(user.clone()),
-            None => return Err(TcError::NotFound(format!("No user named '{}'.", name))),
+            None => return Err(QuipError::NotFound(format!("No user named '{}'.", name))),
         }
     }
 
-    async fn ensure_user(&self, name: impl AsRef<str> + Into<String> + Send) -> TcResult<User> {
+    async fn ensure_user(&self, name: impl AsRef<str> + Into<String> + Send) -> QuipResult<User> {
         let mut users = self.users.lock().await;
         let name_ref = name.as_ref();
 

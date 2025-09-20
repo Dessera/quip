@@ -1,5 +1,5 @@
 use crate::{
-    TcError, TcResult,
+    QuipError, QuipResult,
     request::RequestBody,
     response::{Response, ResponseError},
     server::{
@@ -19,7 +19,7 @@ pub async fn serve_write<S, W>(
     _server: &S,
     user: User,
     writer: &mut ConnectionWriter<W>,
-) -> TcResult<()>
+) -> QuipResult<()>
 where
     S: Backend,
     W: AsyncWriteExt + Unpin,
@@ -37,7 +37,7 @@ pub async fn serve_read<S, R>(
     server: &S,
     user: User,
     reader: &mut ConnectionReader<R>,
-) -> TcResult<()>
+) -> QuipResult<()>
 where
     S: Backend,
     R: AsyncBufReadExt + Unpin,
@@ -46,7 +46,7 @@ where
         let request = {
             match reader.get_request().await {
                 Ok(request) => request,
-                Err(TcError::Parse(_)) => {
+                Err(QuipError::Parse(_)) => {
                     user.push_resp(Response::error(None, ResponseError::BadCommand))
                         .await;
                     continue;
@@ -60,7 +60,7 @@ where
             RequestBody::Login(_) | RequestBody::SetName(_) => {
                 login::serve(server, request, &user).await?
             }
-            RequestBody::Logout => return Err(TcError::Disconnect),
+            RequestBody::Logout => return Err(QuipError::Disconnect),
             RequestBody::Nop => Response::success(Some(request), None),
         };
 

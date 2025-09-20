@@ -7,7 +7,7 @@ pub mod user;
 use log::{info, warn};
 
 use crate::{
-    TcResult,
+    QuipResult,
     server::{backend::Backend, listener::Listener},
 };
 use std::sync::Arc;
@@ -16,7 +16,7 @@ use std::sync::Arc;
 pub async fn run<L: Listener, B: Backend + Send + Sync + 'static>(
     listener: L,
     backend: B,
-) -> TcResult<()> {
+) -> QuipResult<()> {
     match listener.address() {
         Ok(addr) => info!("Server listening on {}", addr),
         Err(_) => info!("Server listening on unknown port"),
