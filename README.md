@@ -2,7 +2,8 @@
 
 Quip is a simple chat protocol, which is developing now.
 
-Quip is not a safe protocol because it dose not implements a "REAL" authentication. Basically, it's just a demo protocol only for learning purpose.
+Quip is not a safe protocol because it dose not implements a "REAL"
+authentication. Basically, it's just a demo protocol only for learning purpose.
 
 ## Critical Unsafe Issues
 
@@ -19,8 +20,9 @@ implementation of `listener/tls.rs` is a fake implementation, which uses a
 I have no way to handle this except rewrite the logic of tls socket (which
 means tons of work), so I just leave the unstable one.
 
-Except that, because of the runtime-dependent socket, all interface of `QuipStream`
-should be wrap into a `Box`, which may cause some **performance issue**.
+Except that, because of the runtime-dependent socket, all interface of
+`QuipStream` should be wrap into a `Box`, which may cause some
+**performance issue**.
 
 I should improve my rust skills :(
 
