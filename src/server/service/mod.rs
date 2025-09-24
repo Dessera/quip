@@ -5,14 +5,15 @@ pub mod unauth;
 
 use crate::{
     QuipError, QuipResult,
-    server::{
-        backend::Backend,
-        stream::{QuipBufReader, QuipBufWriter, QuipStream},
+    io::{
+        DynamicQuipIO,
+        buffer::{QuipBufReader, QuipBufWriter},
     },
+    server::backend::Backend,
 };
 
 /// General serve entry, which represents the entire lifetime of a connection.
-pub async fn serve<S: Backend>(server: &S, conn: QuipStream) -> QuipResult<()> {
+pub async fn serve<S: Backend>(server: &S, conn: DynamicQuipIO) -> QuipResult<()> {
     let (rx, tx) = conn.duplex();
 
     let mut rx = QuipBufReader::new(rx);

@@ -1,15 +1,17 @@
 use crate::{
     QuipError, QuipResult,
+    io::{
+        QuipInput, QuipOutput,
+        buffer::{QuipBufReader, QuipBufWriter},
+    },
     request::RequestBody,
     response::{Response, ResponseError},
     server::{
         backend::Backend,
         service::{login, send},
-        stream::{QuipBufReader, QuipBufWriter},
         user::User,
     },
 };
-use tokio::io::{AsyncRead, AsyncWrite};
 
 /// Write task for a connection.
 ///
@@ -22,7 +24,7 @@ pub async fn serve_write<S, W>(
 ) -> QuipResult<()>
 where
     S: Backend,
-    W: AsyncWrite + Unpin,
+    W: QuipOutput,
 {
     loop {
         user.notify.notified().await;
@@ -40,11 +42,11 @@ pub async fn serve_read<S, R>(
 ) -> QuipResult<()>
 where
     S: Backend,
-    R: AsyncRead + Unpin,
+    R: QuipInput,
 {
     loop {
         let request = {
-            match reader.get_request().await {
+            match reader.read_request().await {
                 Ok(request) => request,
                 Err(QuipError::Parse(_)) => {
                     user.push_resp(Response::error(None, ResponseError::BadCommand))

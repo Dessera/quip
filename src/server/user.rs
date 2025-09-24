@@ -1,9 +1,10 @@
-use crate::{QuipResult, response::Response, server::stream::QuipBufWriter};
-use std::{collections::VecDeque, sync::Arc};
-use tokio::{
-    io::AsyncWrite,
-    sync::{Mutex, Notify},
+use crate::{
+    QuipResult,
+    io::{QuipOutput, buffer::QuipBufWriter},
+    response::Response,
 };
+use std::{collections::VecDeque, sync::Arc};
+use tokio::sync::{Mutex, Notify};
 
 /// User status to cache message before login.
 #[derive(Debug, PartialEq, Eq)]
@@ -52,10 +53,7 @@ impl User {
     /// Write all responses to specific writer.
     ///
     /// All responses should be sended via this method (after authenticated).
-    pub async fn write_all<W>(&self, writer: &mut QuipBufWriter<W>) -> QuipResult<()>
-    where
-        W: AsyncWrite + Unpin,
-    {
+    pub async fn write_all<W: QuipOutput>(&self, writer: &mut QuipBufWriter<W>) -> QuipResult<()> {
         let mut queue = self.queue.lock().await;
 
         while !queue.is_empty() {

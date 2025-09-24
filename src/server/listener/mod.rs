@@ -1,16 +1,15 @@
+//! Quip listener interface.
+
 pub mod tcp;
 pub mod tls;
 
-pub use tcp::*;
-pub use tls::*;
-
-use crate::{QuipResult, server::stream::QuipStream};
+use crate::{QuipResult, io::DynamicQuipIO};
 use std::net::SocketAddr;
 
 /// Server listener interface.
 pub trait Listener {
     /// Accept a connection from listener.
-    fn accept(&self) -> impl Future<Output = QuipResult<QuipStream>> + Send;
+    fn accept(&self) -> impl Future<Output = QuipResult<DynamicQuipIO>> + Send;
 
     /// Get listener address.
     fn address(&self) -> QuipResult<SocketAddr>;
