@@ -21,7 +21,7 @@ accepts two sockets (one for read, another for write).
 - [x] Basic commands (`Login`/`Logout`/`Send` etc.)
 - [x] Simple doc comments
 - [ ] Group commands (`GroupCreate`, `GroupAdd`, `GroupRemove`, `GroupDestroy`)
-- [ ] Response/Request parser
+- [x] Response/Request parser
 - [ ] Unit tests
 - [x] SSL/TLS
 - [ ] Split lib and bins
