@@ -1,17 +1,9 @@
 use crate::{
     QuipError, QuipResult,
     token::{detokenize, tokenize},
+    unwrap_token,
 };
-use std::{fmt, vec::IntoIter as VecIntoIter};
-
-macro_rules! unwrap_token {
-    ($iter:expr, $msg:expr) => {
-        match $iter.next() {
-            Some(value) => value,
-            None => return Err(QuipError::Parse($msg.into())),
-        }
-    };
-}
+use std::fmt;
 
 /// General request body.
 ///
@@ -66,9 +58,22 @@ impl TryFrom<&str> for Request {
 
         let cmd = unwrap_token!(tokens, "No command found");
         let body = match cmd.as_str() {
-            "Send" => parse_send_body(tokens)?,
-            "Login" => parse_login_body(tokens)?,
-            "SetName" => parse_setname_body(tokens)?,
+            "Send" => {
+                let name = unwrap_token!(tokens, "No name found for command Send");
+                let msg = unwrap_token!(tokens, "No message found for command Send");
+
+                RequestBody::Send(name, msg)
+            }
+            "Login" => {
+                let name = unwrap_token!(tokens, "No name found for command Login");
+
+                RequestBody::Login(name)
+            }
+            "SetName" => {
+                let name = unwrap_token!(tokens, "No name found for command SetName");
+
+                RequestBody::SetName(name)
+            }
             "Logout" => RequestBody::Logout,
             "Nop" => RequestBody::Nop,
             _ => return Err(QuipError::Parse(format!("Unexpected command {}", cmd))),
@@ -90,25 +95,6 @@ impl fmt::Display for Request {
 
         f.write_str(detokenize(&tokens).as_str())
     }
-}
-
-fn parse_send_body(mut tokens: VecIntoIter<String>) -> QuipResult<RequestBody> {
-    let name = unwrap_token!(tokens, "No name found for command Send");
-    let msg = unwrap_token!(tokens, "No message found for command Send");
-
-    Ok(RequestBody::Send(name, msg))
-}
-
-fn parse_login_body(mut tokens: VecIntoIter<String>) -> QuipResult<RequestBody> {
-    let name = unwrap_token!(tokens, "No name found for command Login");
-
-    Ok(RequestBody::Login(name))
-}
-
-fn parse_setname_body(mut tokens: VecIntoIter<String>) -> QuipResult<RequestBody> {
-    let name = unwrap_token!(tokens, "No name found for command SetName");
-
-    Ok(RequestBody::SetName(name))
 }
 
 #[cfg(test)]

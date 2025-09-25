@@ -63,7 +63,7 @@ where
                 login::serve(server, request, &user).await?
             }
             RequestBody::Logout => return Err(QuipError::Disconnect),
-            RequestBody::Nop => Response::success(Some(request), None),
+            RequestBody::Nop => Response::success(Some(request.tag), None),
         };
 
         user.push_resp(resp).await;

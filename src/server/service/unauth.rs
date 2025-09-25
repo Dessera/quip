@@ -43,8 +43,8 @@ where
                 }
             }
             RequestBody::Logout => return Err(QuipError::Disconnect),
-            RequestBody::Nop => Response::success(Some(request), None),
-            _ => Response::error(Some(request), ResponseError::Unauthorized),
+            RequestBody::Nop => Response::success(Some(request.tag), None),
+            _ => Response::error(Some(request.tag), ResponseError::Unauthorized),
         };
 
         writer.write_response(resp).await?;

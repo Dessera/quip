@@ -1,4 +1,8 @@
-use crate::{QuipError, QuipResult, request::Request, token::detokenize};
+use crate::{
+    QuipError, QuipResult,
+    token::{detokenize, tokenize},
+    unwrap_token,
+};
 use std::fmt;
 
 /// Error type of response.
@@ -15,7 +19,7 @@ use std::fmt;
 /// A000 Error BadCommand
 /// A001 Error Unauthorized
 /// ```
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ResponseError {
     BadCommand,
     Unauthorized,
@@ -80,48 +84,92 @@ pub enum ResponseBody {
 /// General response, with optional request info.
 #[derive(Debug)]
 pub struct Response {
-    pub request: Option<Request>,
+    pub tag: Option<String>,
     pub body: ResponseBody,
 }
 
 impl Response {
-    pub fn new(request: Option<Request>, body: ResponseBody) -> Self {
-        Self { request, body }
+    pub fn new(tag: Option<String>, body: ResponseBody) -> Self {
+        Self { tag, body }
     }
 
-    pub fn success(request: Option<Request>, msg: Option<String>) -> Self {
-        Response::new(request, ResponseBody::Success(msg))
+    pub fn success(tag: Option<String>, msg: Option<String>) -> Self {
+        Response::new(tag, ResponseBody::Success(msg))
     }
 
-    pub fn error(request: Option<Request>, err: ResponseError) -> Self {
-        Response::new(request, ResponseBody::Error(err))
+    pub fn error(tag: Option<String>, err: ResponseError) -> Self {
+        Response::new(tag, ResponseBody::Error(err))
     }
 
-    pub fn recv(
-        request: Option<Request>,
-        sender: impl Into<String>,
-        msg: impl Into<String>,
-    ) -> Self {
-        Response::new(request, ResponseBody::Recv(sender.into(), msg.into()))
+    pub fn recv(tag: Option<String>, sender: impl Into<String>, msg: impl Into<String>) -> Self {
+        Response::new(tag, ResponseBody::Recv(sender.into(), msg.into()))
+    }
+}
+
+impl TryFrom<String> for Response {
+    type Error = QuipError;
+
+    fn try_from(value: String) -> QuipResult<Self> {
+        Response::try_from(value.as_str())
+    }
+}
+
+impl TryFrom<&str> for Response {
+    type Error = QuipError;
+
+    fn try_from(value: &str) -> QuipResult<Self> {
+        let mut tokens = tokenize(value)?.into_iter();
+
+        let tag = unwrap_token!(tokens, "No tag found");
+        let tag = match tag.as_str() {
+            "*" => None,
+            _ => Some(tag),
+        };
+
+        let resp_type = unwrap_token!(tokens, "No response status found");
+        let body = match resp_type.as_str() {
+            "Success" => ResponseBody::Success(tokens.next()),
+            "Error" => {
+                let code = unwrap_token!(tokens, "No error code found for response Error");
+                ResponseBody::Error(code.try_into()?)
+            }
+            "Recv" => {
+                let name = unwrap_token!(tokens, "No name found for response Recv");
+                let msg = unwrap_token!(tokens, "No message found for response Recv");
+
+                ResponseBody::Recv(name, msg)
+            }
+            _ => {
+                return Err(QuipError::Parse(format!(
+                    "Unexpected response {}",
+                    resp_type
+                )));
+            }
+        };
+
+        Ok(Response::new(tag, body))
     }
 }
 
 impl fmt::Display for Response {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let tag = match &self.request {
-            Some(request) => &request.tag,
+        let tag = match &self.tag {
+            Some(tag) => tag,
             None => "*",
-        }
-        .to_string();
+        };
 
+        let err_msg;
         let tokens = match &self.body {
             ResponseBody::Success(msg) => match msg {
-                Some(msg) => vec![tag, "Success".to_string(), msg.clone()],
-                None => vec![tag, "Success".to_string()],
+                Some(msg) => vec![tag, "Success", msg],
+                None => vec![tag, "Success"],
             },
-            ResponseBody::Error(msg) => vec![tag, "Error".to_string(), msg.to_string()],
+            ResponseBody::Error(msg) => {
+                err_msg = msg.to_string();
+                vec![tag, "Error", err_msg.as_str()]
+            }
             ResponseBody::Recv(name, msg) => {
-                vec![tag, "Recv".to_string(), name.clone(), msg.clone()]
+                vec![tag, "Recv", name, msg]
             }
         };
 
@@ -132,7 +180,70 @@ impl fmt::Display for Response {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::request::{Request, RequestBody};
+
+    #[test]
+    fn test_response_error() {
+        assert_eq!(
+            ResponseError::try_from("BadCommand").unwrap(),
+            ResponseError::BadCommand
+        );
+        assert_eq!(
+            ResponseError::try_from("Unauthorized").unwrap(),
+            ResponseError::Unauthorized
+        );
+        assert_eq!(
+            ResponseError::try_from("Duplicate").unwrap(),
+            ResponseError::Duplicate
+        );
+        assert_eq!(
+            ResponseError::try_from("NotFound").unwrap(),
+            ResponseError::NotFound
+        );
+    }
+
+    #[test]
+    fn test_response_success() {
+        let resp = Response::try_from("A000 Success").unwrap();
+        assert_eq!(resp.tag.unwrap(), "A000");
+
+        match resp.body {
+            ResponseBody::Success(None) => (),
+            _ => panic!("Mismatched response, need Success with no message but others found"),
+        }
+
+        let resp = Response::try_from("A000 Success Message").unwrap();
+        assert_eq!(resp.tag.unwrap(), "A000");
+
+        match resp.body {
+            ResponseBody::Success(Some(msg)) => assert_eq!(msg, "Message"),
+            _ => panic!("Mismatched response, need Success but others found"),
+        }
+    }
+
+    #[test]
+    fn test_response_body_error() {
+        let resp = Response::try_from("A000 Error Duplicate").unwrap();
+        assert_eq!(resp.tag.unwrap(), "A000");
+
+        match resp.body {
+            ResponseBody::Error(ResponseError::Duplicate) => (),
+            _ => panic!("Mismatched response, need Error Duplicate but others found"),
+        }
+    }
+
+    #[test]
+    fn test_response_recv() {
+        let resp = Response::try_from("* Recv Dessera \"How are you today?\"").unwrap();
+        assert!(resp.tag.is_none());
+
+        match resp.body {
+            ResponseBody::Recv(name, msg) => {
+                assert_eq!(name, "Dessera");
+                assert_eq!(msg, "How are you today?");
+            }
+            _ => panic!("Mismatched response, need Recv but others found"),
+        }
+    }
 
     #[test]
     fn test_response_error_display() {
@@ -144,12 +255,10 @@ mod tests {
 
     #[test]
     fn test_response_display_success() {
-        let req = Request::new("A000", RequestBody::Nop);
-        let res = Response::success(Some(req), None);
+        let res = Response::success(Some("A000".to_string()), None);
         assert_eq!(res.to_string(), "A000 Success");
 
-        let req = Request::new("A000", RequestBody::Nop);
-        let res = Response::success(Some(req), Some("AdditionalInfo".to_string()));
+        let res = Response::success(Some("A000".to_string()), Some("AdditionalInfo".to_string()));
         assert_eq!(res.to_string(), "A000 Success AdditionalInfo");
 
         let res = Response::success(None, None);
@@ -158,8 +267,7 @@ mod tests {
 
     #[test]
     fn test_response_display_error() {
-        let req = Request::new("A000", RequestBody::Nop);
-        let res = Response::error(Some(req), ResponseError::BadCommand);
+        let res = Response::error(Some("A000".to_string()), ResponseError::BadCommand);
         assert_eq!(res.to_string(), "A000 Error BadCommand");
 
         let res = Response::error(None, ResponseError::Unauthorized);
@@ -168,8 +276,7 @@ mod tests {
 
     #[test]
     fn test_response_display_recv() {
-        let req = Request::new("A000", RequestBody::Nop);
-        let res = Response::recv(Some(req), "Sender", "Message");
+        let res = Response::recv(Some("A000".to_string()), "Sender", "Message");
         assert_eq!(res.to_string(), "A000 Recv Sender Message");
 
         let res = Response::recv(None, "Sender", "Message");

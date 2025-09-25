@@ -2,6 +2,16 @@
 
 use crate::{QuipError, QuipResult};
 
+#[macro_export]
+macro_rules! unwrap_token {
+    ($iter:expr, $msg:expr) => {
+        match $iter.next() {
+            Some(value) => value,
+            None => return Err(QuipError::Parse($msg.into())),
+        }
+    };
+}
+
 /// Simple tokenizer with quote.
 pub fn tokenize(input: impl AsRef<str>) -> QuipResult<Vec<String>> {
     let input = input.as_ref();

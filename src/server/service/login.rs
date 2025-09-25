@@ -15,12 +15,19 @@ where
 {
     let name = match &request.body {
         RequestBody::Login(name) | RequestBody::SetName(name) => name.clone(),
-        _ => return Ok(Response::error(Some(request), ResponseError::BadCommand)),
+        _ => {
+            return Ok(Response::error(
+                Some(request.tag),
+                ResponseError::BadCommand,
+            ));
+        }
     };
 
     let resp = match server.add_user(&name).await {
-        Ok(_) => Response::success(Some(request), Some(name)),
-        Err(QuipError::Duplicate(_)) => Response::error(Some(request), ResponseError::Duplicate),
+        Ok(_) => Response::success(Some(request.tag), Some(name)),
+        Err(QuipError::Duplicate(_)) => {
+            Response::error(Some(request.tag), ResponseError::Duplicate)
+        }
         Err(err) => return Err(err),
     };
 
@@ -36,22 +43,29 @@ where
 {
     let name = match &request.body {
         RequestBody::Login(name) | RequestBody::SetName(name) => name.clone(),
-        _ => return Ok(Response::error(Some(request), ResponseError::BadCommand)),
+        _ => {
+            return Ok(Response::error(
+                Some(request.tag),
+                ResponseError::BadCommand,
+            ));
+        }
     };
 
     let mut user_data = user.data.lock().await;
 
     if user_data.name == name {
-        return Ok(Response::success(Some(request), Some(name)));
+        return Ok(Response::success(Some(request.tag), Some(name)));
     }
 
     let resp = match server.rename_user(&user_data.name, &name).await {
         Ok(_) => {
             user_data.name = name.clone();
-            Response::success(Some(request), Some(name))
+            Response::success(Some(request.tag), Some(name))
         }
-        Err(QuipError::Duplicate(_)) => Response::error(Some(request), ResponseError::Duplicate),
-        Err(QuipError::NotFound(_)) => Response::error(Some(request), ResponseError::NotFound),
+        Err(QuipError::Duplicate(_)) => {
+            Response::error(Some(request.tag), ResponseError::Duplicate)
+        }
+        Err(QuipError::NotFound(_)) => Response::error(Some(request.tag), ResponseError::NotFound),
         Err(err) => return Err(err),
     };
 

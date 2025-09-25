@@ -12,7 +12,12 @@ where
 {
     let (receiver, msg) = match &request.body {
         RequestBody::Send(receiver, msg) => (receiver.clone(), msg.clone()),
-        _ => return Ok(Response::error(Some(request), ResponseError::BadCommand)),
+        _ => {
+            return Ok(Response::error(
+                Some(request.tag),
+                ResponseError::BadCommand,
+            ));
+        }
     };
 
     let sender = {
@@ -22,10 +27,10 @@ where
 
     let target = match server.ensure_user(&receiver).await {
         Ok(target) => target,
-        Err(_) => return Ok(Response::error(Some(request), ResponseError::NotFound)),
+        Err(_) => return Ok(Response::error(Some(request.tag), ResponseError::NotFound)),
     };
 
     target.push_resp(Response::recv(None, sender, msg)).await;
 
-    Ok(Response::success(Some(request), Some(receiver)))
+    Ok(Response::success(Some(request.tag), Some(receiver)))
 }
