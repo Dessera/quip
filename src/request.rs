@@ -1,11 +1,14 @@
-use crate::{QuipError, QuipResult, token::tokenize};
-use std::vec::IntoIter as VecIntoIter;
+use crate::{
+    QuipError, QuipResult,
+    token::{detokenize, tokenize},
+};
+use std::{fmt, vec::IntoIter as VecIntoIter};
 
 macro_rules! unwrap_token {
     ($iter:expr, $msg:expr) => {
         match $iter.next() {
             Some(value) => value,
-            None => return Err(QuipError::Parse($msg)),
+            None => return Err(QuipError::Parse($msg.into())),
         }
     };
 }
@@ -48,7 +51,7 @@ impl Request {
 impl TryFrom<String> for Request {
     type Error = QuipError;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> {
+    fn try_from(value: String) -> QuipResult<Self> {
         Request::try_from(value.as_str())
     }
 }
@@ -56,17 +59,16 @@ impl TryFrom<String> for Request {
 impl TryFrom<&str> for Request {
     type Error = QuipError;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let tokens = tokenize(value)?;
-        let mut tokens_iter = tokens.into_iter();
+    fn try_from(value: &str) -> QuipResult<Self> {
+        let mut tokens = tokenize(value)?.into_iter();
 
-        let tag = unwrap_token!(tokens_iter, "No tag found".to_string());
+        let tag = unwrap_token!(tokens, "No tag found");
 
-        let cmd = unwrap_token!(tokens_iter, "No command found".to_string());
+        let cmd = unwrap_token!(tokens, "No command found");
         let body = match cmd.as_str() {
-            "Send" => parse_send_body(tokens_iter)?,
-            "Login" => parse_login_body(tokens_iter)?,
-            "SetName" => parse_setname_body(tokens_iter)?,
+            "Send" => parse_send_body(tokens)?,
+            "Login" => parse_login_body(tokens)?,
+            "SetName" => parse_setname_body(tokens)?,
             "Logout" => RequestBody::Logout,
             "Nop" => RequestBody::Nop,
             _ => return Err(QuipError::Parse(format!("Unexpected command {}", cmd))),
@@ -76,21 +78,35 @@ impl TryFrom<&str> for Request {
     }
 }
 
+impl fmt::Display for Request {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let tokens = match &self.body {
+            RequestBody::Send(name, msg) => vec![&self.tag, "Send", &name, &msg],
+            RequestBody::Login(name) => vec![&self.tag, "Login", &name],
+            RequestBody::SetName(name) => vec![&self.tag, "SetName", &name],
+            RequestBody::Logout => vec![&self.tag, "Logout"],
+            RequestBody::Nop => vec![&self.tag, "Nop"],
+        };
+
+        f.write_str(detokenize(&tokens).as_str())
+    }
+}
+
 fn parse_send_body(mut tokens: VecIntoIter<String>) -> QuipResult<RequestBody> {
-    let name = unwrap_token!(tokens, "No name found for command Send".to_string());
-    let msg = unwrap_token!(tokens, "No message found for command Send".to_string());
+    let name = unwrap_token!(tokens, "No name found for command Send");
+    let msg = unwrap_token!(tokens, "No message found for command Send");
 
     Ok(RequestBody::Send(name, msg))
 }
 
 fn parse_login_body(mut tokens: VecIntoIter<String>) -> QuipResult<RequestBody> {
-    let name = unwrap_token!(tokens, "No name found for command Login".to_string());
+    let name = unwrap_token!(tokens, "No name found for command Login");
 
     Ok(RequestBody::Login(name))
 }
 
 fn parse_setname_body(mut tokens: VecIntoIter<String>) -> QuipResult<RequestBody> {
-    let name = unwrap_token!(tokens, "No name found for command SetName".to_string());
+    let name = unwrap_token!(tokens, "No name found for command SetName");
 
     Ok(RequestBody::SetName(name))
 }
@@ -100,21 +116,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_request_login() {
-        let request = Request::try_from("A000 Login Dessera").unwrap();
-
-        assert_eq!(request.tag, "A000");
-
-        match request.body {
-            RequestBody::Login(name) => assert_eq!(name, "Dessera"),
-            _ => panic!("Mismatched command, need Login but others found"),
-        }
-    }
-
-    #[test]
     fn test_request_send() {
         let request = Request::try_from("A000 Send Dessera \"How are you today?\"").unwrap();
-
         assert_eq!(request.tag, "A000");
 
         match request.body {
@@ -127,9 +130,19 @@ mod tests {
     }
 
     #[test]
+    fn test_request_login() {
+        let request = Request::try_from("A000 Login Dessera").unwrap();
+        assert_eq!(request.tag, "A000");
+
+        match request.body {
+            RequestBody::Login(name) => assert_eq!(name, "Dessera"),
+            _ => panic!("Mismatched command, need Login but others found"),
+        }
+    }
+
+    #[test]
     fn test_request_setname() {
         let request = Request::try_from("A000 SetName Dessera").unwrap();
-
         assert_eq!(request.tag, "A000");
 
         match request.body {
@@ -141,7 +154,6 @@ mod tests {
     #[test]
     fn test_request_logout() {
         let request = Request::try_from("A000 Logout").unwrap();
-
         assert_eq!(request.tag, "A000");
 
         match request.body {
@@ -153,7 +165,6 @@ mod tests {
     #[test]
     fn test_request_nop() {
         let request = Request::try_from("A000 Nop").unwrap();
-
         assert_eq!(request.tag, "A000");
 
         match request.body {
@@ -166,5 +177,41 @@ mod tests {
     fn test_request_failed() {
         let request = Request::try_from("A000 Invalid Command");
         assert!(request.is_err());
+    }
+
+    #[test]
+    fn test_request_display_send() {
+        let request = Request::new(
+            "A000",
+            RequestBody::Send("Dessera".to_string(), "Hello! How are you?".to_string()),
+        );
+        assert_eq!(
+            request.to_string(),
+            "A000 Send Dessera \"Hello! How are you?\""
+        );
+    }
+
+    #[test]
+    fn test_request_display_login() {
+        let request = Request::new("A000", RequestBody::Login("Dessera".to_string()));
+        assert_eq!(request.to_string(), "A000 Login Dessera");
+    }
+
+    #[test]
+    fn test_request_display_setname() {
+        let request = Request::new("A000", RequestBody::SetName("Dessera".to_string()));
+        assert_eq!(request.to_string(), "A000 SetName Dessera");
+    }
+
+    #[test]
+    fn test_request_display_logout() {
+        let request = Request::new("A000", RequestBody::Logout);
+        assert_eq!(request.to_string(), "A000 Logout");
+    }
+
+    #[test]
+    fn test_request_display_nop() {
+        let request = Request::new("A000", RequestBody::Nop);
+        assert_eq!(request.to_string(), "A000 Nop");
     }
 }

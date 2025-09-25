@@ -1,4 +1,4 @@
-use crate::request::Request;
+use crate::{QuipError, QuipResult, request::Request, token::detokenize};
 use std::fmt;
 
 /// Error type of response.
@@ -21,6 +21,35 @@ pub enum ResponseError {
     Unauthorized,
     Duplicate,
     NotFound,
+}
+
+impl TryFrom<String> for ResponseError {
+    type Error = QuipError;
+
+    fn try_from(value: String) -> QuipResult<Self> {
+        ResponseError::try_from(value.as_str())
+    }
+}
+
+impl TryFrom<&str> for ResponseError {
+    type Error = QuipError;
+
+    fn try_from(value: &str) -> QuipResult<Self> {
+        let err = match value {
+            "BadCommand" => ResponseError::BadCommand,
+            "Unauthorized" => ResponseError::Unauthorized,
+            "Duplicate" => ResponseError::Duplicate,
+            "NotFound" => ResponseError::NotFound,
+            _ => {
+                return Err(QuipError::Parse(format!(
+                    "{} is not a valid ResponseError",
+                    value
+                )));
+            }
+        };
+
+        Ok(err)
+    }
 }
 
 impl fmt::Display for ResponseError {
@@ -79,22 +108,24 @@ impl Response {
 
 impl fmt::Display for Response {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{} {}",
-            match &self.request {
-                Some(request) => &request.tag,
-                None => "*",
+        let tag = match &self.request {
+            Some(request) => &request.tag,
+            None => "*",
+        }
+        .to_string();
+
+        let tokens = match &self.body {
+            ResponseBody::Success(msg) => match msg {
+                Some(msg) => vec![tag, "Success".to_string(), msg.clone()],
+                None => vec![tag, "Success".to_string()],
             },
-            match &self.body {
-                ResponseBody::Success(msg) => match msg {
-                    Some(msg) => format!("Success {}", msg),
-                    None => format!("Success"),
-                },
-                ResponseBody::Error(msg) => format!("Error {}", msg),
-                ResponseBody::Recv(sender, msg) => format!("Recv {} {}", sender, msg),
+            ResponseBody::Error(msg) => vec![tag, "Error".to_string(), msg.to_string()],
+            ResponseBody::Recv(name, msg) => {
+                vec![tag, "Recv".to_string(), name.clone(), msg.clone()]
             }
-        )
+        };
+
+        f.write_str(detokenize(&tokens).as_str())
     }
 }
 
@@ -113,11 +144,11 @@ mod tests {
 
     #[test]
     fn test_response_display_success() {
-        let req = Request::new("A000".to_string(), RequestBody::Nop);
+        let req = Request::new("A000", RequestBody::Nop);
         let res = Response::success(Some(req), None);
         assert_eq!(res.to_string(), "A000 Success");
 
-        let req = Request::new("A000".to_string(), RequestBody::Nop);
+        let req = Request::new("A000", RequestBody::Nop);
         let res = Response::success(Some(req), Some("AdditionalInfo".to_string()));
         assert_eq!(res.to_string(), "A000 Success AdditionalInfo");
 
@@ -127,7 +158,7 @@ mod tests {
 
     #[test]
     fn test_response_display_error() {
-        let req = Request::new("A000".to_string(), RequestBody::Nop);
+        let req = Request::new("A000", RequestBody::Nop);
         let res = Response::error(Some(req), ResponseError::BadCommand);
         assert_eq!(res.to_string(), "A000 Error BadCommand");
 
@@ -137,11 +168,14 @@ mod tests {
 
     #[test]
     fn test_response_display_recv() {
-        let req = Request::new("A000".to_string(), RequestBody::Nop);
+        let req = Request::new("A000", RequestBody::Nop);
         let res = Response::recv(Some(req), "Sender", "Message");
         assert_eq!(res.to_string(), "A000 Recv Sender Message");
 
         let res = Response::recv(None, "Sender", "Message");
         assert_eq!(res.to_string(), "* Recv Sender Message");
+
+        let res = Response::recv(None, "Sender", "Complex  Message");
+        assert_eq!(res.to_string(), "* Recv Sender \"Complex  Message\"");
     }
 }

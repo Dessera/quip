@@ -47,12 +47,45 @@ pub fn tokenize(input: impl AsRef<str>) -> QuipResult<Vec<String>> {
     Ok(res)
 }
 
+/// Undo the tokenize result.
+pub fn detokenize(input: &Vec<impl AsRef<str>>) -> String {
+    let mut res = Vec::new();
+    for item in input {
+        let item = item.as_ref();
+        let mut curr = String::new();
+
+        if item.contains(' ') {
+            curr.push('\"');
+            curr += &escape_token(&item);
+            curr.push('\"');
+        } else {
+            curr = escape_token(&item);
+        }
+
+        res.push(curr);
+    }
+
+    let res = res.join(" ");
+    res
+}
+
+fn escape_token(input: &str) -> String {
+    input.chars().fold(String::new(), |mut s, ch| {
+        match ch {
+            '\"' => s += "\\\"",
+            '\\' => s += "\\\\",
+            _ => s.push(ch),
+        }
+        s
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_tokenizer_plaintext() {
+    fn test_tokenize_plaintext() {
         let res = tokenize("A000 Login Hello").unwrap();
         let target: Vec<String> = ["A000", "Login", "Hello"]
             .iter()
@@ -63,7 +96,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tokenizer_quote() {
+    fn test_tokenize_quote() {
         let res = tokenize("A000 Login \"Hello  How R U\"").unwrap();
         let target: Vec<String> = ["A000", "Login", "Hello  How R U"]
             .iter()
@@ -74,7 +107,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tokenizer_escape() {
+    fn test_tokenize_escape() {
         let res = tokenize("A000 Login \\\" \\\"").unwrap();
         let target: Vec<String> = ["A000", "Login", "\"", "\""]
             .iter()
@@ -85,11 +118,35 @@ mod tests {
     }
 
     #[test]
-    fn test_tokenizer_failed() {
+    fn test_tokenize_failed() {
         let res = tokenize("A000 Login \"Invalid");
         assert!(res.is_err());
 
         let res = tokenize("A000 Login Invalid\\");
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_detokenize_plaintext() {
+        let res = detokenize(&vec!["A000", "Login", "Hello"]);
+        let target = "A000 Login Hello";
+
+        assert_eq!(res, target);
+    }
+
+    #[test]
+    fn test_detokenize_quote() {
+        let res = detokenize(&vec!["A000", "Login", "Hello  How R U"]);
+        let target = "A000 Login \"Hello  How R U\"";
+
+        assert_eq!(res, target);
+    }
+
+    #[test]
+    fn test_detokenize_escape() {
+        let res = detokenize(&vec!["A000", "Login", "\"", "\""]);
+        let target = "A000 Login \\\" \\\"";
+
+        assert_eq!(res, target);
     }
 }
