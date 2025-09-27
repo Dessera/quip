@@ -1,11 +1,11 @@
 use crate::{
     QuipError, QuipResult,
+    data::{BackendData, BackendQueryData},
     server::{
         backend::Backend,
-        user::{User, UserStatus},
+        connection::{Connection, ConnectionRef, ConnectionStatus},
     },
 };
-use log::info;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
 
@@ -13,102 +13,85 @@ use tokio::sync::Mutex;
 ///
 /// All users are stored in memory with a [`HashMap`].
 pub struct MemoryBackend {
-    users: Arc<Mutex<HashMap<String, User>>>,
+    data: BackendQueryData,
+    users: Arc<Mutex<HashMap<String, Arc<Mutex<Connection>>>>>,
 }
 
 impl MemoryBackend {
-    pub fn new() -> Self {
+    pub fn new(data: BackendQueryData) -> Self {
         Self {
+            data,
             users: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    /// Create [`MemoryBackend`] from raw data.
+    pub fn from_data(data: BackendData) -> QuipResult<Self> {
+        let data = data.try_into()?;
+        Ok(Self::new(data))
     }
 }
 
 impl Backend for MemoryBackend {
-    async fn add_user(&self, name: impl AsRef<str> + Into<String> + Send) -> QuipResult<User> {
-        let mut users = self.users.lock().await;
-        let name_ref = name.as_ref();
-
-        if let Some(user) = users.get(name_ref) {
-            let mut user_data = user.data.lock().await;
-
-            return match user_data.status {
-                UserStatus::Cache => {
-                    user_data.status = UserStatus::Auth;
-
-                    info!("User {} has been authenticated.", name_ref);
-
-                    Ok(user.clone())
-                }
-                _ => Err(QuipError::Duplicate(format!(
-                    "User '{}' exists.",
-                    user_data.name
-                ))),
-            };
+    async fn load_user(&self, name: &str) -> QuipResult<ConnectionRef> {
+        if let None = self.data.users.get(name) {
+            return Err(QuipError::NotFound(format!("No user named {}", name)));
         }
 
-        info!("User {} has been authenticated.", name_ref);
+        let mut users = self.users.lock().await;
 
-        let user = User::new(name_ref, UserStatus::Auth);
-        users.insert(name.into(), user.clone());
+        let user = match users.get(name) {
+            Some(user) => {
+                let mut user_handle = user.lock().await;
+
+                if user_handle.status != ConnectionStatus::Cache {
+                    return Err(QuipError::Duplicate(format!("User {} exists", name)));
+                }
+
+                user_handle.status = ConnectionStatus::Auth;
+                user.clone()
+            }
+            None => {
+                let user = Arc::new(Mutex::new(Connection::new(name, ConnectionStatus::Auth)));
+                users.insert(name.into(), user.clone());
+                user
+            }
+        };
 
         Ok(user)
     }
 
-    async fn remove_user(&self, user: User) -> QuipResult<()> {
+    async fn unload_user(&self, name: &str) -> QuipResult<()> {
         let mut users = self.users.lock().await;
-        let user_data = user.data.lock().await;
-
-        users.remove(&user_data.name);
-
-        info!("User {} has left.", user_data.name);
+        users.remove(name);
 
         Ok(())
     }
 
-    async fn rename_user(&self, original: &str, name: &str) -> QuipResult<()> {
-        let mut users = self.users.lock().await;
-        let user = match users.get(original) {
-            Some(user) => user.clone(),
-            None => {
-                return Err(QuipError::NotFound(format!(
-                    "No user named '{}'.",
-                    original
-                )));
-            }
-        };
-
-        if users.contains_key(name) {
-            return Err(QuipError::Duplicate(format!("User '{}' exists.", name)));
-        }
-
-        users.insert(name.to_string(), user);
-        users.remove(original);
-
-        info!("User {} has renamed to {}.", original, name);
-
-        Ok(())
-    }
-
-    async fn find_user(&self, name: &str) -> QuipResult<User> {
+    async fn find_user(&self, name: &str) -> QuipResult<ConnectionRef> {
         let users = self.users.lock().await;
         match users.get(name) {
             Some(user) => Ok(user.clone()),
-            None => return Err(QuipError::NotFound(format!("No user named '{}'.", name))),
+            None => return Err(QuipError::NotFound(format!("No user named {}", name))),
         }
     }
 
-    async fn ensure_user(&self, name: impl AsRef<str> + Into<String> + Send) -> QuipResult<User> {
-        let mut users = self.users.lock().await;
-        let name_ref = name.as_ref();
-
-        match users.get(name_ref) {
-            Some(user) => Ok(user.clone()),
-            None => {
-                let user = User::new(name_ref, UserStatus::Cache);
-                users.insert(name.into(), user.clone());
-                Ok(user)
-            }
+    async fn ensure_user(&self, name: &str) -> QuipResult<ConnectionRef> {
+        if let None = self.data.users.get(name) {
+            return Err(QuipError::NotFound(format!("No user named {}", name)));
         }
+
+        let mut users = self.users.lock().await;
+
+        let user = match users.get(name) {
+            Some(user) => user.clone(),
+            None => {
+                let user = Arc::new(Mutex::new(Connection::new(name, ConnectionStatus::Cache)));
+                users.insert(name.into(), user.clone());
+                user
+            }
+        };
+
+        Ok(user)
     }
 }

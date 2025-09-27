@@ -9,8 +9,11 @@ pub enum QuipError {
     #[error("Client has disconnected")]
     Disconnect,
 
-    #[error("Parse error: Invalid command '{0}'")]
+    #[error("Parse error: {0}")]
     Parse(String),
+
+    #[error("Serialize error: {0}")]
+    Serialize(#[from] serde_json::Error),
 
     #[error("Duplicate error: {0}")]
     Duplicate(String),

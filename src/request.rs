@@ -11,15 +11,14 @@ use std::fmt;
 ///
 /// - `Send`: Send message to another user or group, i.e.
 ///   `<TAG> Send <USER> <MESSAGE>` or `<TAG> Send G:<GROUP> <MESSAGE>`.
-/// - `Login`/`SetName`: Authenticate connection with a user name, i.e.
-///   `<TAG> Login|SetName <NAME>`.
+/// - `Login`: Authenticate connection with a user name, i.e.
+///   `<TAG> Login <NAME> <PASSWORD>`.
 /// - `Logout`: Disconnect immediately, i.e. `<TAG> Logout`.
 /// - `Nop`: Do nothing, i.e. `<TAG> Nop`.
 #[derive(Debug)]
 pub enum RequestBody {
     Send(String, String),
-    Login(String),
-    SetName(String),
+    Login(String, String),
     Logout,
     Nop,
 }
@@ -66,13 +65,9 @@ impl TryFrom<&str> for Request {
             }
             "Login" => {
                 let name = unwrap_token!(tokens, "No name found for command Login");
+                let password = unwrap_token!(tokens, "No password found for command Login");
 
-                RequestBody::Login(name)
-            }
-            "SetName" => {
-                let name = unwrap_token!(tokens, "No name found for command SetName");
-
-                RequestBody::SetName(name)
+                RequestBody::Login(name, password)
             }
             "Logout" => RequestBody::Logout,
             "Nop" => RequestBody::Nop,
@@ -86,9 +81,8 @@ impl TryFrom<&str> for Request {
 impl fmt::Display for Request {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let tokens = match &self.body {
-            RequestBody::Send(name, msg) => vec![&self.tag, "Send", &name, &msg],
-            RequestBody::Login(name) => vec![&self.tag, "Login", &name],
-            RequestBody::SetName(name) => vec![&self.tag, "SetName", &name],
+            RequestBody::Send(name, msg) => vec![&self.tag, "Send", name, msg],
+            RequestBody::Login(name, password) => vec![&self.tag, "Login", name, password],
             RequestBody::Logout => vec![&self.tag, "Logout"],
             RequestBody::Nop => vec![&self.tag, "Nop"],
         };
@@ -117,23 +111,15 @@ mod tests {
 
     #[test]
     fn test_request_login() {
-        let request = Request::try_from("A000 Login Dessera").unwrap();
+        let request = Request::try_from("A000 Login Dessera Pass").unwrap();
         assert_eq!(request.tag, "A000");
 
         match request.body {
-            RequestBody::Login(name) => assert_eq!(name, "Dessera"),
+            RequestBody::Login(name, password) => {
+                assert_eq!(name, "Dessera");
+                assert_eq!(password, "Pass");
+            }
             _ => panic!("Mismatched command, need Login but others found"),
-        }
-    }
-
-    #[test]
-    fn test_request_setname() {
-        let request = Request::try_from("A000 SetName Dessera").unwrap();
-        assert_eq!(request.tag, "A000");
-
-        match request.body {
-            RequestBody::SetName(name) => assert_eq!(name, "Dessera"),
-            _ => panic!("Mismatched command, need SetName but others found"),
         }
     }
 
@@ -179,14 +165,11 @@ mod tests {
 
     #[test]
     fn test_request_display_login() {
-        let request = Request::new("A000", RequestBody::Login("Dessera".to_string()));
-        assert_eq!(request.to_string(), "A000 Login Dessera");
-    }
-
-    #[test]
-    fn test_request_display_setname() {
-        let request = Request::new("A000", RequestBody::SetName("Dessera".to_string()));
-        assert_eq!(request.to_string(), "A000 SetName Dessera");
+        let request = Request::new(
+            "A000",
+            RequestBody::Login("Dessera".to_string(), "Pass".to_string()),
+        );
+        assert_eq!(request.to_string(), "A000 Login Dessera Pass");
     }
 
     #[test]

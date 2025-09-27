@@ -1,21 +1,21 @@
 pub mod backend;
+pub mod connection;
 pub mod listener;
 pub mod service;
-pub mod user;
-
-use log::{info, warn};
 
 use crate::{
     QuipResult,
     server::{backend::Backend, listener::Listener},
 };
+use log::{info, warn};
 use std::sync::Arc;
 
 /// Server runner with any listener and backend implementation.
-pub async fn run<L: Listener, B: Backend + Send + Sync + 'static>(
-    listener: L,
-    backend: B,
-) -> QuipResult<()> {
+pub async fn run<L, B>(listener: L, backend: B) -> QuipResult<()>
+where
+    L: Listener,
+    B: Backend + Send + Sync + 'static,
+{
     match listener.address() {
         Ok(addr) => info!("Server listening on {}", addr),
         Err(_) => info!("Server listening on unknown port"),

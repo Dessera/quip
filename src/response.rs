@@ -23,6 +23,7 @@ use std::fmt;
 pub enum ResponseError {
     BadCommand,
     Unauthorized,
+    Authorized,
     Duplicate,
     NotFound,
 }
@@ -61,6 +62,7 @@ impl fmt::Display for ResponseError {
         f.write_str(match self {
             ResponseError::BadCommand => "BadCommand",
             ResponseError::Unauthorized => "Unauthorized",
+            ResponseError::Authorized => "Authorized",
             ResponseError::Duplicate => "Duplicate",
             ResponseError::NotFound => "NotFound",
         })
@@ -192,6 +194,10 @@ mod tests {
             ResponseError::Unauthorized
         );
         assert_eq!(
+            ResponseError::try_from("Authorized").unwrap(),
+            ResponseError::Authorized
+        );
+        assert_eq!(
             ResponseError::try_from("Duplicate").unwrap(),
             ResponseError::Duplicate
         );
@@ -249,6 +255,7 @@ mod tests {
     fn test_response_error_display() {
         assert_eq!(ResponseError::BadCommand.to_string(), "BadCommand");
         assert_eq!(ResponseError::Unauthorized.to_string(), "Unauthorized");
+        assert_eq!(ResponseError::Authorized.to_string(), "Authorized");
         assert_eq!(ResponseError::Duplicate.to_string(), "Duplicate");
         assert_eq!(ResponseError::NotFound.to_string(), "NotFound");
     }

@@ -4,33 +4,20 @@ pub mod memory;
 pub(crate) mod test;
 
 pub use self::memory::*;
-use crate::{QuipResult, server::user::User};
+use crate::{QuipResult, server::connection::ConnectionRef};
 use std::future::Future;
 
 /// Server backend interface, which implements storage of user.
 pub trait Backend {
-    /// Add a user to backend.
-    fn add_user(
-        &self,
-        name: impl AsRef<str> + Into<String> + Send,
-    ) -> impl Future<Output = QuipResult<User>> + Send;
+    /// Load a user in backend.
+    fn load_user(&self, name: &str) -> impl Future<Output = QuipResult<ConnectionRef>> + Send;
 
-    // Remove a user from backend.
-    fn remove_user(&self, user: User) -> impl Future<Output = QuipResult<()>> + Send;
-
-    /// Rename a user in backend.
-    fn rename_user(
-        &self,
-        original: &str,
-        name: &str,
-    ) -> impl Future<Output = QuipResult<()>> + Send;
+    // Unload a user in backend.
+    fn unload_user(&self, name: &str) -> impl Future<Output = QuipResult<()>> + Send;
 
     /// Find a user from backend.
-    fn find_user(&self, name: &str) -> impl Future<Output = QuipResult<User>> + Send;
+    fn find_user(&self, name: &str) -> impl Future<Output = QuipResult<ConnectionRef>> + Send;
 
     /// Find or create a user in backend.
-    fn ensure_user(
-        &self,
-        name: impl AsRef<str> + Into<String> + Send,
-    ) -> impl Future<Output = QuipResult<User>> + Send;
+    fn ensure_user(&self, name: &str) -> impl Future<Output = QuipResult<ConnectionRef>> + Send;
 }

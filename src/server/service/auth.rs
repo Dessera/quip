@@ -5,67 +5,117 @@ use crate::{
         buffer::{QuipBufReader, QuipBufWriter},
     },
     request::RequestBody,
-    response::{Response, ResponseError},
-    server::{
-        backend::Backend,
-        service::{login, send},
-        user::User,
-    },
+    response::{Response, ResponseBody, ResponseError},
+    server::{backend::Backend, connection::ConnectionRef},
 };
+use log::{debug, warn};
 
 /// Write task for a connection.
 ///
 /// All responses should be written in this, otherwise client may not be able
 /// to process the response correctly.
-pub async fn serve_write<S, W>(
+pub async fn serve_write<S: Backend, W: QuipOutput>(
     _server: &S,
-    user: User,
+    conn: ConnectionRef,
     writer: &mut QuipBufWriter<W>,
-) -> QuipResult<()>
-where
-    S: Backend,
-    W: QuipOutput,
-{
+) -> QuipResult<()> {
+    let (notify, queue, name) = {
+        let conn = conn.lock().await;
+        (conn.notify.clone(), conn.queue.clone(), conn.name.clone())
+    };
+
     loop {
-        user.notify.notified().await;
-        user.write_all(writer).await?;
+        notify.notified().await;
+
+        let mut queue = queue.lock().await;
+        let mut cnt: usize = 0;
+        while !queue.is_empty() {
+            let resp = match queue.pop_front() {
+                Some(resp) => resp,
+                None => continue,
+            };
+
+            writer.write_response(resp).await?;
+            cnt += 1;
+        }
+
+        debug!("Sync {} message to user {}", cnt, name);
     }
 }
 
 /// Read task for a connection.
 ///
 /// This task reads and parse all requests and push responses to write task.
-pub async fn serve_read<S, R>(
+pub async fn serve_read<S: Backend, R: QuipInput>(
     server: &S,
-    user: User,
+    conn: ConnectionRef,
     reader: &mut QuipBufReader<R>,
-) -> QuipResult<()>
-where
-    S: Backend,
-    R: QuipInput,
-{
+) -> QuipResult<()> {
+    let (notify, queue) = {
+        let conn = conn.lock().await;
+        (conn.notify.clone(), conn.queue.clone())
+    };
+
     loop {
         let request = {
             match reader.read_request().await {
                 Ok(request) => request,
-                Err(QuipError::Parse(_)) => {
-                    user.push_resp(Response::error(None, ResponseError::BadCommand))
-                        .await;
+                Err(QuipError::Parse(msg)) => {
+                    warn!("{}", msg);
+
+                    queue
+                        .lock()
+                        .await
+                        .push_back(Response::error(None, ResponseError::BadCommand));
+                    notify.notify_one();
                     continue;
                 }
                 Err(err) => return Err(err),
             }
         };
 
-        let resp = match &request.body {
-            RequestBody::Send(_, _) => send::serve(server, request, &user).await?,
-            RequestBody::Login(_) | RequestBody::SetName(_) => {
-                login::serve(server, request, &user).await?
-            }
+        let body = match request.body {
+            RequestBody::Send(name, msg) => serve_send(server, &conn, name, msg).await?,
+            RequestBody::Login(_, _) => ResponseBody::Error(ResponseError::Authorized),
             RequestBody::Logout => return Err(QuipError::Disconnect),
-            RequestBody::Nop => Response::success(Some(request.tag), None),
+            RequestBody::Nop => ResponseBody::Success(None),
         };
 
-        user.push_resp(resp).await;
+        queue
+            .lock()
+            .await
+            .push_back(Response::new(Some(request.tag), body));
+        notify.notify_one();
     }
+}
+
+/// Serve `Send` command.
+async fn serve_send<S: Backend>(
+    server: &S,
+    conn: &ConnectionRef,
+    receiver: String,
+    msg: String,
+) -> QuipResult<ResponseBody> {
+    let sender = {
+        let conn = conn.lock().await;
+        conn.name.clone()
+    };
+
+    let recv_conn = match server.ensure_user(&receiver).await {
+        Ok(target) => target,
+        Err(_) => return Ok(ResponseBody::Error(ResponseError::NotFound)),
+    };
+
+    let (notify, queue) = {
+        let recv_conn = recv_conn.lock().await;
+        (recv_conn.notify.clone(), recv_conn.queue.clone())
+    };
+
+    queue
+        .lock()
+        .await
+        .push_back(Response::recv(None, sender, msg));
+    notify.notify_one();
+
+    Ok(ResponseBody::Success(Some(receiver)))
 }
