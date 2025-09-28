@@ -43,6 +43,7 @@ impl TryFrom<&str> for ResponseError {
         let err = match value {
             "BadCommand" => ResponseError::BadCommand,
             "Unauthorized" => ResponseError::Unauthorized,
+            "Authorized" => ResponseError::Authorized,
             "Duplicate" => ResponseError::Duplicate,
             "NotFound" => ResponseError::NotFound,
             _ => {

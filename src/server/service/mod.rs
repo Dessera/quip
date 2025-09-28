@@ -43,7 +43,7 @@ async fn serve_inner<S: Backend, R: QuipInput, W: QuipOutput>(
         auth::serve_write(server, conn.clone(), &mut tx)
     );
 
-    server.unload_user(&conn_name).await?;
+    server.unload_conn(&conn_name).await?;
 
     info!("User {} logout", conn_name);
 

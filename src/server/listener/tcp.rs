@@ -6,28 +6,31 @@ use crate::{
     server::listener::Listener,
 };
 use log::info;
-use std::net::SocketAddr;
 use tokio::net::{TcpListener as TokioTcpListener, ToSocketAddrs};
 
 /// Wrapper for [`TcpListener`].
-pub struct TcpListener(TokioTcpListener);
+pub struct TcpListener {
+    listener: TokioTcpListener,
+}
 
 impl TcpListener {
     /// Create a new [`TcpListener`] with specific address.
     pub async fn bind<T: ToSocketAddrs>(addr: T) -> QuipResult<Self> {
-        Ok(Self(TokioTcpListener::bind(addr).await?))
+        let listener = TokioTcpListener::bind(addr).await?;
+
+        if let Ok(local_addr) = listener.local_addr() {
+            info!("Tcp listener was binded to {}", local_addr);
+        }
+
+        Ok(Self { listener })
     }
 }
 
 impl Listener for TcpListener {
     async fn accept(&self) -> QuipResult<DynamicQuipIO> {
-        let (socket, addr) = self.0.accept().await?;
+        let (socket, addr) = self.listener.accept().await?;
         info!("Tcp socket {} accepted", addr);
 
         Ok(Box::new(QuipTcpStream::new(socket)))
-    }
-
-    fn address(&self) -> QuipResult<SocketAddr> {
-        Ok(self.0.local_addr()?)
     }
 }

@@ -14,14 +14,14 @@ use tokio::sync::Mutex;
 /// All users are stored in memory with a [`HashMap`].
 pub struct MemoryBackend {
     data: BackendQueryData,
-    users: Arc<Mutex<HashMap<String, Arc<Mutex<Connection>>>>>,
+    conns: Arc<Mutex<HashMap<String, Arc<Mutex<Connection>>>>>,
 }
 
 impl MemoryBackend {
     pub fn new(data: BackendQueryData) -> Self {
         Self {
             data,
-            users: Arc::new(Mutex::new(HashMap::new())),
+            conns: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -33,65 +33,73 @@ impl MemoryBackend {
 }
 
 impl Backend for MemoryBackend {
-    async fn load_user(&self, name: &str) -> QuipResult<ConnectionRef> {
-        if let None = self.data.users.get(name) {
-            return Err(QuipError::NotFound(format!("No user named {}", name)));
-        }
-
-        let mut users = self.users.lock().await;
-
-        let user = match users.get(name) {
+    async fn load_conn(&self, name: &str, password: &str) -> QuipResult<ConnectionRef> {
+        match self.data.users.get(name) {
             Some(user) => {
-                let mut user_handle = user.lock().await;
+                if user.password != password {
+                    return Err(QuipError::Authorize(format!(
+                        "Incorrect password for user {}",
+                        name
+                    )));
+                }
+            }
+            None => return Err(QuipError::NotFound(format!("No user named {}", name))),
+        };
 
-                if user_handle.status != ConnectionStatus::Cache {
+        let mut conns = self.conns.lock().await;
+
+        let conn = match conns.get(name) {
+            Some(conn) => {
+                let mut conn_handle = conn.lock().await;
+
+                if conn_handle.status != ConnectionStatus::Cache {
                     return Err(QuipError::Duplicate(format!("User {} exists", name)));
                 }
 
-                user_handle.status = ConnectionStatus::Auth;
-                user.clone()
+                conn_handle.status = ConnectionStatus::Auth;
+                conn.clone()
             }
             None => {
-                let user = Arc::new(Mutex::new(Connection::new(name, ConnectionStatus::Auth)));
-                users.insert(name.into(), user.clone());
-                user
+                let conn = Arc::new(Mutex::new(Connection::new(name, ConnectionStatus::Auth)));
+                conns.insert(name.into(), conn.clone());
+                conn
             }
         };
 
-        Ok(user)
+        Ok(conn)
     }
 
-    async fn unload_user(&self, name: &str) -> QuipResult<()> {
-        let mut users = self.users.lock().await;
-        users.remove(name);
+    async fn unload_conn(&self, name: &str) -> QuipResult<()> {
+        let mut conns = self.conns.lock().await;
+        conns.remove(name);
 
         Ok(())
     }
 
-    async fn find_user(&self, name: &str) -> QuipResult<ConnectionRef> {
-        let users = self.users.lock().await;
-        match users.get(name) {
+    async fn find_conn(&self, name: &str) -> QuipResult<ConnectionRef> {
+        let conns = self.conns.lock().await;
+        match conns.get(name) {
             Some(user) => Ok(user.clone()),
             None => return Err(QuipError::NotFound(format!("No user named {}", name))),
         }
     }
 
-    async fn ensure_user(&self, name: &str) -> QuipResult<ConnectionRef> {
+    async fn ensure_conn(&self, name: &str) -> QuipResult<ConnectionRef> {
         if let None = self.data.users.get(name) {
             return Err(QuipError::NotFound(format!("No user named {}", name)));
         }
 
-        let mut users = self.users.lock().await;
+        let mut conns = self.conns.lock().await;
 
-        let user = match users.get(name) {
-            Some(user) => user.clone(),
+        let conn = match conns.get(name) {
+            Some(conn) => conn.clone(),
             None => {
-                let user = Arc::new(Mutex::new(Connection::new(name, ConnectionStatus::Cache)));
-                users.insert(name.into(), user.clone());
-                user
+                let conn = Arc::new(Mutex::new(Connection::new(name, ConnectionStatus::Cache)));
+                conns.insert(name.into(), conn.clone());
+                conn
             }
         };
 
-        Ok(user)
+        Ok(conn)
     }
 }

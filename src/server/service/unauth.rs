@@ -1,4 +1,4 @@
-use log::warn;
+use log::{debug, warn};
 
 use crate::{
     QuipError, QuipResult,
@@ -19,7 +19,7 @@ pub async fn serve<S: Backend, R: QuipInput, W: QuipOutput>(
     writer: &mut QuipBufWriter<W>,
 ) -> QuipResult<ConnectionRef> {
     let (name, resp) = serve_inner(server, reader, writer).await?;
-    let conn = server.find_user(&name).await?;
+    let conn = server.find_conn(&name).await?;
 
     {
         let conn = conn.lock().await;
@@ -35,54 +35,50 @@ async fn serve_inner<S: Backend, R: QuipInput, W: QuipOutput>(
     reader: &mut QuipBufReader<R>,
     writer: &mut QuipBufWriter<W>,
 ) -> QuipResult<(String, Response)> {
-    let res = loop {
-        let request = match reader.read_request().await {
-            Ok(request) => request,
-            Err(QuipError::Parse(msg)) => {
-                warn!("{}", msg);
+    Ok(loop {
+        let resp = match reader.read_request().await {
+            Ok(request) => {
+                let body = match request.body {
+                    RequestBody::Login(name, password) => {
+                        let body = serve_login(server, &name, &password).await?;
 
-                writer
-                    .write_response(Response::error(None, ResponseError::BadCommand))
-                    .await?;
-                continue;
+                        match body {
+                            ResponseBody::Success(_) => {
+                                break (name, Response::new(Some(request.tag), body));
+                            }
+                            _ => body,
+                        }
+                    }
+                    RequestBody::Logout => return Err(QuipError::Disconnect),
+                    RequestBody::Nop => ResponseBody::Success(None),
+                    _ => ResponseBody::Error(ResponseError::Unauthorized),
+                };
+
+                debug!("Unknown: {}", request.tag);
+                Response::new(Some(request.tag), body)
+            }
+            Err(QuipError::Parse(msg)) => {
+                warn!("Unknown: {}", msg);
+                Response::error(None, ResponseError::BadCommand)
             }
             Err(err) => return Err(err), // Unexpected
         };
 
-        let body = match request.body {
-            RequestBody::Login(name, password) => {
-                let body = serve_login(server, &name, &password).await?;
-
-                if let ResponseBody::Success(_) = body {
-                    break (name, Response::new(Some(request.tag), body));
-                }
-
-                body
-            }
-            RequestBody::Logout => return Err(QuipError::Disconnect),
-            RequestBody::Nop => ResponseBody::Success(None),
-            _ => ResponseBody::Error(ResponseError::Unauthorized),
-        };
-
-        writer
-            .write_response(Response::new(Some(request.tag), body))
-            .await?;
-    };
-
-    Ok(res)
+        writer.write_response(resp).await?;
+    })
 }
 
-// TODO: Use password.
 /// Serve `Login` command.
 async fn serve_login<S: Backend>(
     server: &S,
     name: &str,
-    _password: &str,
+    password: &str,
 ) -> QuipResult<ResponseBody> {
-    let resp = match server.load_user(&name).await {
+    let resp = match server.load_conn(name, password).await {
         Ok(_) => ResponseBody::Success(Some(name.to_string())),
         Err(QuipError::Duplicate(_)) => ResponseBody::Error(ResponseError::Duplicate),
         Err(QuipError::NotFound(_)) => ResponseBody::Error(ResponseError::NotFound),
+        Err(QuipError::Authorize(_)) => ResponseBody::Error(ResponseError::Unauthorized),
         Err(err) => return Err(err),
     };
 

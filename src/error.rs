@@ -21,6 +21,9 @@ pub enum QuipError {
     #[error("NotFound error: {0}")]
     NotFound(String),
 
+    #[error("Authorize error: {0}")]
+    Authorize(String),
+
     #[error("Unknown error: {0}")]
     Unknown(String),
 }

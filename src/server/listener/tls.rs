@@ -24,9 +24,19 @@ impl TlsListener {
         write_addr: impl ToSocketAddrs,
         identity: Identity,
     ) -> QuipResult<Self> {
+        let rx_listener = TcpListener::bind(read_addr).await?;
+        let tx_listener = TcpListener::bind(write_addr).await?;
+
+        if let (Ok(rx_addr), Ok(tx_addr)) = (rx_listener.local_addr(), tx_listener.local_addr()) {
+            info!(
+                "SSL/TLS listener was binded to {} [read], {} [write]",
+                rx_addr, tx_addr
+            );
+        }
+
         Ok(Self {
-            rx_listener: TcpListener::bind(read_addr).await?,
-            tx_listener: TcpListener::bind(write_addr).await?,
+            rx_listener,
+            tx_listener,
             acceptor: TlsAcceptor::from(NativeTlsAcceptor::builder(identity).build()?),
         })
     }
@@ -48,14 +58,10 @@ impl Listener for TlsListener {
         )?;
 
         info!(
-            "SSL/TLS socket accepted, read {}, write {}",
+            "SSL/TLS socket accepted, {} [read], {} [write]",
             rx_addr, tx_addr
         );
 
         Ok(Box::new(QuipTlsStream::new(rx, tx)))
-    }
-
-    fn address(&self) -> QuipResult<SocketAddr> {
-        Ok(self.rx_listener.local_addr()?) // TODO: rx and tx
     }
 }

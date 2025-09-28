@@ -1,23 +1,25 @@
 pub mod memory;
 
-#[cfg(test)]
-pub(crate) mod test;
+pub use memory::*;
 
-pub use self::memory::*;
 use crate::{QuipResult, server::connection::ConnectionRef};
 use std::future::Future;
 
-/// Server backend interface, which implements storage of user.
+/// Server backend interface, which implements storage of connections.
 pub trait Backend {
-    /// Load a user in backend.
-    fn load_user(&self, name: &str) -> impl Future<Output = QuipResult<ConnectionRef>> + Send;
+    /// Load a connection in backend.
+    fn load_conn(
+        &self,
+        name: &str,
+        password: &str,
+    ) -> impl Future<Output = QuipResult<ConnectionRef>> + Send;
 
-    // Unload a user in backend.
-    fn unload_user(&self, name: &str) -> impl Future<Output = QuipResult<()>> + Send;
+    // Unload a connection in backend.
+    fn unload_conn(&self, name: &str) -> impl Future<Output = QuipResult<()>> + Send;
 
-    /// Find a user from backend.
-    fn find_user(&self, name: &str) -> impl Future<Output = QuipResult<ConnectionRef>> + Send;
+    /// Find a connection from backend.
+    fn find_conn(&self, name: &str) -> impl Future<Output = QuipResult<ConnectionRef>> + Send;
 
-    /// Find or create a user in backend.
-    fn ensure_user(&self, name: &str) -> impl Future<Output = QuipResult<ConnectionRef>> + Send;
+    /// Find or create a connection in backend.
+    fn ensure_conn(&self, name: &str) -> impl Future<Output = QuipResult<ConnectionRef>> + Send;
 }

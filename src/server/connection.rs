@@ -7,6 +7,7 @@ use tokio::sync::{Mutex, Notify};
 pub enum ConnectionStatus {
     Cache,
     Auth,
+    Close,
 }
 
 /// Connection handler for server.

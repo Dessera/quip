@@ -6,7 +6,10 @@ use crate::{
     },
     request::RequestBody,
     response::{Response, ResponseBody, ResponseError},
-    server::{backend::Backend, connection::ConnectionRef},
+    server::{
+        backend::Backend,
+        connection::{ConnectionRef, ConnectionStatus},
+    },
 };
 use log::{debug, warn};
 
@@ -51,40 +54,32 @@ pub async fn serve_read<S: Backend, R: QuipInput>(
     conn: ConnectionRef,
     reader: &mut QuipBufReader<R>,
 ) -> QuipResult<()> {
-    let (notify, queue) = {
+    let (notify, queue, name) = {
         let conn = conn.lock().await;
-        (conn.notify.clone(), conn.queue.clone())
+        (conn.notify.clone(), conn.queue.clone(), conn.name.clone())
     };
 
     loop {
-        let request = {
-            match reader.read_request().await {
-                Ok(request) => request,
-                Err(QuipError::Parse(msg)) => {
-                    warn!("{}", msg);
+        let resp = match reader.read_request().await {
+            Ok(request) => {
+                let body = match request.body {
+                    RequestBody::Send(name, msg) => serve_send(server, &conn, name, msg).await?,
+                    RequestBody::Login(_, _) => ResponseBody::Error(ResponseError::Authorized),
+                    RequestBody::Logout => return Err(QuipError::Disconnect),
+                    RequestBody::Nop => ResponseBody::Success(None),
+                };
 
-                    queue
-                        .lock()
-                        .await
-                        .push_back(Response::error(None, ResponseError::BadCommand));
-                    notify.notify_one();
-                    continue;
-                }
-                Err(err) => return Err(err),
+                debug!("{}: {}", name, request.tag);
+                Response::new(Some(request.tag), body)
             }
+            Err(QuipError::Parse(msg)) => {
+                warn!("{}: {}", name, msg);
+                Response::error(None, ResponseError::BadCommand)
+            }
+            Err(err) => return Err(err),
         };
 
-        let body = match request.body {
-            RequestBody::Send(name, msg) => serve_send(server, &conn, name, msg).await?,
-            RequestBody::Login(_, _) => ResponseBody::Error(ResponseError::Authorized),
-            RequestBody::Logout => return Err(QuipError::Disconnect),
-            RequestBody::Nop => ResponseBody::Success(None),
-        };
-
-        queue
-            .lock()
-            .await
-            .push_back(Response::new(Some(request.tag), body));
+        queue.lock().await.push_back(resp);
         notify.notify_one();
     }
 }
@@ -101,21 +96,22 @@ async fn serve_send<S: Backend>(
         conn.name.clone()
     };
 
-    let recv_conn = match server.ensure_user(&receiver).await {
+    let recv_conn = match server.ensure_conn(&receiver).await {
         Ok(target) => target,
         Err(_) => return Ok(ResponseBody::Error(ResponseError::NotFound)),
     };
 
-    let (notify, queue) = {
-        let recv_conn = recv_conn.lock().await;
-        (recv_conn.notify.clone(), recv_conn.queue.clone())
-    };
+    let recv_conn = recv_conn.lock().await;
 
-    queue
+    recv_conn
+        .queue
         .lock()
         .await
         .push_back(Response::recv(None, sender, msg));
-    notify.notify_one();
+
+    if recv_conn.status != ConnectionStatus::Cache {
+        recv_conn.notify.notify_one();
+    }
 
     Ok(ResponseBody::Success(Some(receiver)))
 }
